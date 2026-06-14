@@ -33,3 +33,7 @@ Security focus:
 
 # Important Note 
 After major changes, please update this file (AGENTS.md). Keep this file up to date with the project’s status.
+
+Current frontend status:
+- `app/page.tsx` now uses controlled form state for email, password, and repository URL.
+- `lib/api.ts` provides the shared backend client for login, registration, GitHub OAuth start, and repo submission.

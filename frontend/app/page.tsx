@@ -1,6 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
+import {
+  login,
+  register,
+  startGithubOAuth,
+  submitRepo,
+} from "../lib/api";
 
 type AuthMode = "login" | "signup";
 
@@ -9,11 +15,15 @@ function AuthField({
   type,
   placeholder,
   autoComplete,
+  value,
+  onChange,
 }: {
   label: string;
   type: string;
   placeholder: string;
   autoComplete?: string;
+  value: string;
+  onChange: (event: ChangeEvent<HTMLInputElement>) => void;
 }) {
   return (
     <label className="block space-y-2">
@@ -22,6 +32,8 @@ function AuthField({
         type={type}
         placeholder={placeholder}
         autoComplete={autoComplete}
+        value={value}
+        onChange={onChange}
         className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 text-slate-100 placeholder:text-slate-500 shadow-sm outline-none transition focus:border-cyan-400/60 focus:ring-4 focus:ring-cyan-400/10"
       />
     </label>
@@ -32,10 +44,14 @@ function AuthButton({
   children,
   variant = "primary",
   type = "button",
+  onClick,
+  disabled = false,
 }: {
-  children: React.ReactNode;
+  children: ReactNode;
   variant?: "primary" | "secondary";
   type?: "button" | "submit";
+  onClick?: () => void | Promise<void>;
+  disabled?: boolean;
 }) {
   const baseClasses =
     "inline-flex w-full items-center justify-center rounded-xl px-4 py-3 text-sm font-semibold transition focus:outline-none focus:ring-4 focus:ring-cyan-400/20";
@@ -45,7 +61,12 @@ function AuthButton({
       : "border border-white/10 bg-white/5 text-slate-100 hover:bg-white/10";
 
   return (
-    <button type={type} className={`${baseClasses} ${variantClasses}`}>
+    <button
+      type={type}
+      onClick={onClick}
+      disabled={disabled}
+      className={`${baseClasses} ${variantClasses} disabled:cursor-not-allowed disabled:opacity-60`}
+    >
       {children}
     </button>
   );
@@ -66,6 +87,64 @@ function GithubIcon() {
 
 export default function Home() {
   const [mode, setMode] = useState<AuthMode>("login");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [repoUrl, setRepoUrl] = useState("");
+  const [statusMessage, setStatusMessage] = useState<string | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    setIsSubmitting(true);
+    setErrorMessage(null);
+    setStatusMessage(null);
+
+    try {
+      if (mode === "login") {
+        await login({ email, password });
+      } else {
+        await register({ email, password });
+      }
+
+      const repoResponse = await submitRepo({ repoUrl });
+
+      setStatusMessage(
+        repoResponse?.jobId
+          ? `Submitted repository for analysis. Job ID: ${repoResponse.jobId}`
+          : "Repository submitted for analysis."
+      );
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Request failed. Please try again."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
+
+  async function handleGithubOAuth() {
+    setIsSubmitting(true);
+    setErrorMessage(null);
+    setStatusMessage(null);
+
+    try {
+      const response = await startGithubOAuth();
+
+      if (response?.url) {
+        window.location.href = response.url;
+        return;
+      }
+
+      setStatusMessage("GitHub OAuth flow started.");
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error ? error.message : "Unable to start GitHub OAuth."
+      );
+    } finally {
+      setIsSubmitting(false);
+    }
+  }
 
   return (
     <main className="min-h-screen overflow-hidden bg-slate-950 text-slate-100">
@@ -170,12 +249,14 @@ export default function Home() {
                 </button>
               </div>
 
-              <form className="space-y-4">
+              <form className="space-y-4" onSubmit={handleSubmit}>
                 <AuthField
                   label="Email address"
                   type="email"
                   placeholder="you@example.com"
                   autoComplete="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
                 />
 
                 <AuthField
@@ -183,6 +264,8 @@ export default function Home() {
                   type="password"
                   placeholder="••••••••"
                   autoComplete={mode === "login" ? "current-password" : "new-password"}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
                 />
 
                 <label className="block space-y-2">
@@ -192,16 +275,23 @@ export default function Home() {
                   <input
                     type="url"
                     placeholder="https://github.com/owner/repo"
+                    value={repoUrl}
+                    onChange={(event) => setRepoUrl(event.target.value)}
                     className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 text-slate-100 placeholder:text-slate-500 shadow-sm outline-none transition focus:border-cyan-400/60 focus:ring-4 focus:ring-cyan-400/10"
                   />
                 </label>
 
                 <div className="grid gap-3 pt-2 sm:grid-cols-2">
-                  <AuthButton type="submit">
+                  <AuthButton type="submit" disabled={isSubmitting}>
                     {mode === "login" ? "Login to Dashboard" : "Create Account"}
                   </AuthButton>
 
-                  <AuthButton variant="secondary">
+                  <AuthButton
+                    variant="secondary"
+                    type="button"
+                    onClick={handleGithubOAuth}
+                    disabled={isSubmitting}
+                  >
                     <span className="inline-flex items-center gap-2">
                       <GithubIcon />
                       Continue with GitHub
@@ -209,6 +299,18 @@ export default function Home() {
                   </AuthButton>
                 </div>
               </form>
+
+              {(statusMessage || errorMessage) && (
+                <div
+                  className={`mt-6 rounded-2xl border px-4 py-3 text-sm ${
+                    errorMessage
+                      ? "border-rose-500/30 bg-rose-500/10 text-rose-100"
+                      : "border-emerald-500/30 bg-emerald-500/10 text-emerald-100"
+                  }`}
+                >
+                  {errorMessage ?? statusMessage}
+                </div>
+              )}
 
               <div className="mt-8 grid gap-4 rounded-2xl border border-white/10 bg-white/[0.04] p-4 text-sm text-slate-300 sm:grid-cols-2">
                 <div>
@@ -227,11 +329,7 @@ export default function Home() {
                 </div>
               </div>
 
-              {/* Connect the login API here once backend auth is available. */}
-              {/* Connect the registration API here once backend auth is available. */}
-              {/* Start the GitHub OAuth login flow here when OAuth is implemented. */}
-              {/* Send the GitHub repository URL to the backend here for analysis. */}
-              {/* Handle JWT/token storage here later after authentication succeeds. */}
+              {/* Login, registration, OAuth, and repo submission now go through the frontend API client. */}
             </div>
           </section>
         </div>
