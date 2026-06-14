@@ -12,7 +12,7 @@ Top-level tree:
 code-platform/
 ├─ docker-compose.yml
 ├─ analyzer/            # (empty) analysis worker / engine (to be implemented)
-├─ backend/             # (empty) backend API server (to be implemented)
+├─ backend/             # minimal FastAPI backend (see backend/app/main.py)
 ├─ docs/                # documentation
 ├─ frontend/            # Next.js frontend app
 │  ├─ app/
@@ -30,7 +30,8 @@ code-platform/
 ```
 
 Notes:
-- Several project folders are present but currently empty (backend, analyzer, worker). The frontend is implemented in Next.js and provides the onboarding UI.
+- The frontend is implemented in Next.js and provides the onboarding UI.
+- A minimal backend API server has been added using FastAPI at `backend/app/main.py` with a simple HTML root and OpenAPI docs available at `/docs`.
 
 ---
 
@@ -81,31 +82,45 @@ The frontend uses Next.js; open http://localhost:3000 by default.
 
 ## Backend setup instructions
 
-The `backend/` directory is present but currently empty. The expected backend responsibilities are:
+A minimal backend API server has been added using FastAPI. The entrypoint for the sample app is `backend/app/main.py` and exposes a simple HTML root at `/` and interactive API docs at `/docs`.
 
-- Implement authentication endpoints: `POST /api/auth/login`, `POST /api/auth/register`.
-- Implement GitHub OAuth starter and callback endpoints: `GET /api/auth/oauth/github/start` and `/api/auth/oauth/github/callback`.
-- Implement analysis submission endpoint: `POST /api/analysis/submit` which accepts a JSON body { repoUrl } and returns { jobId } or status.
+Recommended Python quick start (from project root):
 
-Suggested minimal backend stack and quick start (example):
-
-1. Create a Node.js Express server in `backend/` (or a Next.js API route server). Example commands (from project root):
+1. Create or activate a virtual environment (optional but recommended):
 
 ```bash
-mkdir backend && cd backend
-npm init -y
-npm install express cors dotenv
+cd backend
+python -m venv .venv
+.\.venv\Scripts\activate    # Windows
+source .venv/bin/activate    # macOS / Linux
 ```
 
-2. Add a simple server file `index.js` and implement the routes listed above.
-
-3. Run the backend in development:
+2. Install runtime dependencies:
 
 ```bash
-node index.js
+python -m pip install --upgrade pip
+python -m pip install fastapi uvicorn[standard]
 ```
 
-Note: repository currently contains no backend code; you'll need to implement and document the exact contract used by the frontend. See "Environment variables" below for recommended variables.
+3. Run the dev server:
+
+```bash
+# from the `backend` folder
+python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```
+
+4. Open the app:
+
+- HTML root: http://127.0.0.1:8000/
+- OpenAPI / docs: http://127.0.0.1:8000/docs
+
+Planned backend responsibilities (to implement beyond the minimal stub):
+
+- Authentication endpoints: `POST /api/auth/login`, `POST /api/auth/register`.
+- GitHub OAuth starter and callback: `GET /api/auth/oauth/github/start`, `GET /api/auth/oauth/github/callback`.
+- Analysis submission: `POST /api/analysis/submit` accepting `{ repoUrl }` and returning `{ jobId }` or status.
+
+Environment variables recommended for future backend work remain the same (OAuth client id/secret, DB connection, JWT secret, etc.).
 
 ---
 
@@ -127,7 +142,7 @@ Include a `.env` file in the `backend/` directory for these values. Keep secrets
 ## How to install dependencies (summary)
 
 - Frontend: `cd frontend && npm install`
-- Backend: when you create the backend, run `cd backend && npm install`
+- Backend (Python FastAPI example): `cd backend && python -m pip install -r requirements.txt` or `python -m pip install fastapi uvicorn[standard]`
 
 ---
 
@@ -140,11 +155,11 @@ cd frontend
 npm run dev
 ```
 
-- Backend (development — example):
+- Backend (development — FastAPI example):
 
 ```bash
 cd backend
-node index.js
+uv run uvicorn app.main:app --reload
 ```
 
 - Docker (if you add services to docker-compose.yml):
@@ -167,7 +182,8 @@ docker-compose up --build
 
 ## Notes about current unfinished parts
 
-- The `backend/`, `analyzer/`, and `worker/` folders are empty — server-side code and the analysis engine are unimplemented.
+- The `analyzer/` and `worker/` folders are still empty — server-side analysis engine and background worker are unimplemented.
+- The `backend/` folder contains a minimal FastAPI app at `backend/app/main.py` as a starting point for API implementation.
 - Frontend `page.tsx` contains UI placeholders for authentication, GitHub OAuth, and repository submission. The UI does not yet call real backend endpoints.
 - There are no environment variable files or secrets configured; OAuth and token exchanges must be implemented server-side before enabling OAuth flows.
 - Token handling strategy: frontend currently does not store JWTs; when implemented, prefer HttpOnly secure cookies for production.

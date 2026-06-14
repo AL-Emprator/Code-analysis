@@ -1,6 +1,25 @@
-"use client";
+"use client"; // Diese Komponente läuft im Browser, nicht nur auf dem Server.
+
+/*  
+Das ist Nötig , weil der Code Dinge benutzt wie 
+
+  useState(...)
+  window.location.href = ...
+  onClick
+  onSubmit
+
+
+*/
+
+//useState speichert veränderliche Werte im UI, zum Beispiel E-Mail, Passwort oder Fehlermeldungen.
+// ChangeEvent und FormEvent sind Typen für Ereignisse, die bei der Interaktion mit Formularen auftreten.
+// ReactNode ist ein Typ, zum Beispiel Text, Icon oder JSX innerhalb eines Buttons.
+
 
 import { useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
+
+//Dann kommen die API-Funktionen: login, register, startGithubOAuth und submitRepo, die wir in lib/api.ts definiert haben.
+//Die sind Eigene Frontend-API-Wrapper, die Requests an dein Backend schicken.
 import {
   login,
   register,
@@ -10,6 +29,7 @@ import {
 
 type AuthMode = "login" | "signup";
 
+// AuthField ist eine wiederverwendbare Komponente für Eingabefelder mit Label, z.B. E-Mail und Passwort.
 function AuthField({
   label,
   type,
@@ -23,7 +43,9 @@ function AuthField({
   placeholder: string;
   autoComplete?: string;
   value: string;
-  onChange: (event: ChangeEvent<HTMLInputElement>) => void;
+  onChange: (event: ChangeEvent<HTMLInputElement>) => void; 
+  // Der Wert kommt aus React-State, und jede Änderung wird über onChange zurück in den State geschrieben
+  // Wenn der Benutzer tippt, wird email aktualisiert.
 }) {
   return (
     <label className="block space-y-2">
@@ -40,6 +62,7 @@ function AuthField({
   );
 }
 
+//Das ist eine wiederverwendbare Button-Komponente. 
 function AuthButton({
   children,
   variant = "primary",
@@ -85,6 +108,8 @@ function GithubIcon() {
   );
 }
 
+
+// Das ist die Hauptkomponente der Seite, die den gesamten UI- und Interaktionscode enthält.
 export default function Home() {
   const [mode, setMode] = useState<AuthMode>("login");
   const [email, setEmail] = useState("");
@@ -94,21 +119,26 @@ export default function Home() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+
+  // handleSubmit ist die Funktion, die aufgerufen wird, wenn das Formular abgeschickt wird. 
+  // Sie kümmert sich um Login/Registrierung und Repo-Submission.
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setIsSubmitting(true);
-    setErrorMessage(null);
-    setStatusMessage(null);
+    event.preventDefault(); // Das verhindert, dass der Browser die Seite neu lädt.
+    setIsSubmitting(true); // Aktiviert den Ladezustand, z.B. um Buttons zu deaktivieren.
+    setErrorMessage(null); // Löscht vorherige Fehlermeldungen.
+    setStatusMessage(null); // Löscht vorherige Statusmeldungen.
 
     try {
-      if (mode === "login") {
-        await login({ email, password });
+      if (mode === "login") { // Wenn wir im Login-Modus sind, rufen wir die login-Funktion auf.
+        await login({ email, password }); // Das ist die API-Funktion, die einen Request an dein Backend schickt, um den Benutzer zu authentifizieren.
       } else {
-        await register({ email, password });
+        await register({ email, password }); // Wenn wir im Signup-Modus sind, rufen wir die register-Funktion auf, um ein neues Konto zu erstellen.
       }
 
-      const repoResponse = await submitRepo({ repoUrl });
+      const repoResponse = await submitRepo({ repoUrl }); // Nachdem der Benutzer eingeloggt oder registriert ist, schicken wir die Repo-URL zur Analyse an das Backend.
 
+      // Je nachdem, ob die API eine Job-ID zurückgibt, 
+      // zeigen wir eine entsprechende Statusmeldung an.
       setStatusMessage(
         repoResponse?.jobId
           ? `Submitted repository for analysis. Job ID: ${repoResponse.jobId}`
@@ -123,14 +153,22 @@ export default function Home() {
     }
   }
 
-  async function handleGithubOAuth() {
-    setIsSubmitting(true);
-    setErrorMessage(null);
-    setStatusMessage(null);
 
+  // handleGithubOAuth ist die Funktion, 
+  // die aufgerufen wird, wenn der Benutzer den "Continue with GitHub"-Button klickt.
+  async function handleGithubOAuth() {
+    setIsSubmitting(true); // Aktiviert den Ladezustand, z.B. um Buttons zu deaktivieren.
+    setErrorMessage(null); // Löscht vorherige Fehlermeldungen.
+    setStatusMessage(null); // Löscht vorherige Statusmeldungen.
+
+    // Wir rufen die startGithubOAuth-Funktion auf, 
+    // die einen Request an dein Backend schickt, um den OAuth-Flow zu starten.
     try {
       const response = await startGithubOAuth();
 
+
+      // Wenn die Antwort eine URL enthält, 
+      // leiten wir den Benutzer dorthin weiter, um den OAuth-Flow abzuschließen.
       if (response?.url) {
         window.location.href = response.url;
         return;
@@ -249,8 +287,11 @@ export default function Home() {
                 </button>
               </div>
 
+
+               // Das Formular für Login/Registrierung und Repo-Submission.
+              // Es nutzt die AuthField-Komponente für E-Mail, Passwort und Repo-URL,
               <form className="space-y-4" onSubmit={handleSubmit}>
-                <AuthField
+                <AuthField // Das ist das E-Mail-Feld, das die AuthField-Komponente verwendet.
                   label="Email address"
                   type="email"
                   placeholder="you@example.com"
