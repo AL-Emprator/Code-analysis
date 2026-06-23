@@ -38,6 +38,9 @@ async function request<T>(
       ...(options.headers ?? {}),
     },
     ...options,
+
+    credentials: "include", // Wir senden Cookies mit, damit die Session auf dem Server erkannt wird.
+
   });
 
   // Wir versuchen, die Antwort als JSON zu parsen. Wenn das fehlschlägt (z.B. weil die Antwort leer ist), verwenden wir ein leeres Objekt 
