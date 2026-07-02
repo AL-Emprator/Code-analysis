@@ -17,9 +17,59 @@ export type StartGithubOAuthResponse = {
   url?: string;
 };
 
+
 export type SubmitRepoResponse = {
   jobId?: string;
+  status: "queued" | "running" | "completed" | "failed";
 };
+
+export type AnalysisJobStatus =
+  | "queued"
+  | "running"
+  | "completed"
+  | "failed";
+
+export type AnalysisJobResponse = {
+  jobId: string;
+  repoUrl: string;
+  repositoryOwner: string;
+  repositoryName: string;
+  status: AnalysisJobStatus;
+  errorMessage: string | null;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+};
+
+
+export async function getAnalysisJob(jobId: string) {
+  return request<AnalysisJobResponse>(
+    `/api/analysis/jobs/${encodeURIComponent(jobId)}`,
+    {
+      method: "GET",
+    }
+  );
+}
+
+// Das ist der Typ für den aktuellen Benutzer, 
+// der von deinem Backend zurückgegeben wird. 
+// Er enthält die ID, E-Mail, GitHub-Login, Name und Avatar-URL des Benutzers.
+export type CurrentUser = {
+  id: number;
+  email: string | null;
+  githubLogin: string;
+  name: string | null;
+  avatarUrl: string | null;
+};
+
+// Das ist der Typ für die Antwort, 
+// die dein Backend zurückgibt, 
+// wenn du den aktuellen Benutzer abfragst.
+export type CurrentUserResponse = {
+  authenticated: boolean;
+  user: CurrentUser;
+};
+
 
 // API_BASE_URL ist die Basis-URL für alle API-Requests. Sie wird aus der Umgebungsvariable NEXT_PUBLIC_API_URL gelesen,
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
@@ -28,39 +78,40 @@ const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "";
 // führt den Fetch durch und behandelt die Antwort.
 // path ist der Endpunkt, z.B. "/api/auth/login", 
 // und options sind die Fetch-Optionen wie Methode, Headers und Body.
+
 async function request<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
   const response = await fetch(`${API_BASE_URL}${path}`, {
+    ...options,
+    credentials: "include", // Das sorgt dafür, dass Cookies (wie Auth-Cookies) bei jedem Request mitgeschickt werden.
     headers: {
       "Content-Type": "application/json",
       ...(options.headers ?? {}),
     },
-    ...options,
-
-    credentials: "include", // Wir senden Cookies mit, damit die Session auf dem Server erkannt wird.
-
   });
 
-  // Wir versuchen, die Antwort als JSON zu parsen. Wenn das fehlschlägt (z.B. weil die Antwort leer ist), verwenden wir ein leeres Objekt 
-  // als Fallback.
   const payload = (await response.json().catch(() => ({}))) as T;
 
-  // Wenn die Antwort einen Fehlerstatus hat (z.B. 400 oder 500), werfen wir einen Fehler mit einer Nachricht, 
-  // die entweder aus dem Payload
-  // kommt (wenn es ein "message"-Feld gibt) oder eine generische Nachricht mit dem Statuscode enthält.
   if (!response.ok) {
     const message =
-      typeof payload === "object" && payload !== null && "message" in payload
-        ? String((payload as ApiErrorPayload).message)
-        : `Request failed with status ${response.status}`;
+      typeof payload === "object" &&
+      payload !== null &&
+      "detail" in payload
+        ? String((payload as { detail?: string }).detail)
+        : typeof payload === "object" &&
+            payload !== null &&
+            "message" in payload
+          ? String((payload as { message?: string }).message)
+          : `Request failed with status ${response.status}`;
 
     throw new Error(message);
   }
 
   return payload;
 }
+
 
 // Das sind die API-Funktionen, die wir in der Hauptkomponente verwenden, um mit dem Backend zu kommunizieren.
 export async function login(payload: AuthPayload) {
@@ -92,6 +143,29 @@ export async function startGithubOAuth() {
 export async function submitRepo(payload: RepoPayload) {
   return request<SubmitRepoResponse>("/api/analysis/submit", { // Sie schickt einen POST-Request an /api/analysis/submit mit der Repo-URL im Body.
     method: "POST",
-    body: JSON.stringify(payload),
+    body: JSON.stringify(payload), //"repoUrl": "https://github.com/owner/repo"
+  });
+}
+
+// resetAuthCookies ist die Funktion, die die Authentifizierungs-Cookies zurücksetzt. Sie wird in der Entwicklungsumgebung verwendet, um den Zustand der Authentifizierung zu testen.
+export type ResetCookiesResponse = {
+  message: string;
+};
+
+export async function resetAuthCookies() {
+  return request<ResetCookiesResponse>("/api/auth/dev/reset-cookies", {
+    method: "POST",
+  });
+}
+
+
+// getCurrentUser ist die Funktion, 
+// die den aktuellen Benutzer vom Backend abfragt. 
+// Sie wird verwendet, um zu prüfen, ob der Benutzer angemeldet ist und 
+// um seine Daten zu erhalten.
+
+export async function getCurrentUser() {
+  return request<CurrentUserResponse>("/api/auth/me", {
+    method: "GET",
   });
 }

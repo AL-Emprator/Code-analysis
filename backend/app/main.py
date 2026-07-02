@@ -5,6 +5,22 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.auth import router as auth_router
 from app.core.config import settings
 
+from app.core.database import Base, engine
+
+# Diese Imports sorgen dafür, dass SQLAlchemy die Modelle kennt.
+from app.models.session import UserSession
+from app.models.user import User
+
+from app.api.analysis import router as analysis_router
+from app.api.auth import router as auth_router
+from app.core.database import Base, engine
+
+from app.models.analysis_job import AnalysisJob
+from app.models.session import UserSession
+from app.models.user import User
+
+Base.metadata.create_all(bind=engine)
+
 
 app = FastAPI(title="Code Analysis Platform API")
 
@@ -17,6 +33,8 @@ app.add_middleware(
 )
 
 app.include_router(auth_router)
+app.include_router(analysis_router)
+
 
 @app.get("/", response_class=HTMLResponse)
 async def read_root(request: Request):

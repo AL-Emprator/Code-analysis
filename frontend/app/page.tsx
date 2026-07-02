@@ -16,7 +16,7 @@ Das ist Nötig , weil der Code Dinge benutzt wie
 // ReactNode ist ein Typ, zum Beispiel Text, Icon oder JSX innerhalb eines Buttons.
 
 
-import { useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
+import { useEffect, useState, type ChangeEvent, type FormEvent, type ReactNode } from "react";
 
 //Dann kommen die API-Funktionen: login, register, startGithubOAuth und submitRepo, die wir in lib/api.ts definiert haben.
 //Die sind Eigene Frontend-API-Wrapper, die Requests an dein Backend schicken.
@@ -25,7 +25,12 @@ import {
   register,
   startGithubOAuth,
   submitRepo,
+  resetAuthCookies,
+  getCurrentUser,
+  type CurrentUser,
 } from "../lib/api";
+
+import { useRouter } from "next/navigation";
 
 type AuthMode = "login" | "signup";
 
@@ -61,6 +66,12 @@ function AuthField({
     </label>
   );
 }
+
+type AuthStatus =
+  | "loading"
+  | "authenticated"
+  | "unauthenticated";
+
 
 //Das ist eine wiederverwendbare Button-Komponente. 
 function AuthButton({
@@ -120,9 +131,39 @@ export default function Home() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
 
+  const [authStatus, setAuthStatus] = useState<AuthStatus>("loading");
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+
+  const router = useRouter();
+
+
+  useEffect(() => {
+    async function checkAuthentication() {
+      try {
+        const response = await getCurrentUser();
+      
+        if (response.authenticated) {
+          setCurrentUser(response.user);
+          setAuthStatus("authenticated");
+          setStatusMessage(`Welcome back, ${response.user.name ?? response.user.githubLogin}!`);
+        } else {
+          setCurrentUser(null);
+          setAuthStatus("unauthenticated");
+        }
+      } catch {
+        setCurrentUser(null);
+        setAuthStatus("unauthenticated");
+        
+      }
+    }
+
+    void checkAuthentication();
+  }, []);
+
+
   // handleSubmit ist die Funktion, die aufgerufen wird, wenn das Formular abgeschickt wird. 
   // Sie kümmert sich um Login/Registrierung und Repo-Submission.
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleAuthSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); // Das verhindert, dass der Browser die Seite neu lädt.
     setIsSubmitting(true); // Aktiviert den Ladezustand, z.B. um Buttons zu deaktivieren.
     setErrorMessage(null); // Löscht vorherige Fehlermeldungen.
@@ -135,21 +176,51 @@ export default function Home() {
         await register({ email, password }); // Wenn wir im Signup-Modus sind, rufen wir die register-Funktion auf, um ein neues Konto zu erstellen.
       }
 
-      const repoResponse = await submitRepo({ repoUrl }); // Nachdem der Benutzer eingeloggt oder registriert ist, schicken wir die Repo-URL zur Analyse an das Backend.
+      const authResponse = await getCurrentUser(); // Nachdem der Benutzer eingeloggt oder registriert ist, holen wir die aktuellen Benutzerdaten vom Backend.
+      if (!authResponse.authenticated) {
+        throw new Error(
+          "Die Authentifizierung konnte nicht bestätigt werden."
+        );
+      }
 
-      // Je nachdem, ob die API eine Job-ID zurückgibt, 
-      // zeigen wir eine entsprechende Statusmeldung an.
+      setCurrentUser(authResponse.user);
+      setAuthStatus("authenticated");
+    
       setStatusMessage(
-        repoResponse?.jobId
-          ? `Submitted repository for analysis. Job ID: ${repoResponse.jobId}`
-          : "Repository submitted for analysis."
+        mode === "login"
+          ? "Erfolgreich angemeldet."
+          : "Konto erfolgreich erstellt."
       );
     } catch (error) {
+        setCurrentUser(null);
+        setAuthStatus("unauthenticated");
+
       setErrorMessage(
-        error instanceof Error ? error.message : "Request failed. Please try again."
-      );
+          error instanceof Error
+            ? error.message
+            : "Authentifizierung fehlgeschlagen."
+        );
+
     } finally {
-      setIsSubmitting(false);
+        setIsSubmitting(false);
+      }
+    }
+
+ // handleResetCookies ist die Funktion, die aufgerufen wird, wenn der Benutzer den "Reset Cookies"-Button klickt.
+    async function handleResetCookies() {
+    setErrorMessage(null);
+    setStatusMessage(null);
+
+    try {
+      const response = await resetAuthCookies();
+
+      setStatusMessage(response.message);
+    } catch (error) {
+      setErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Cookies konnten nicht gelöscht werden."
+      );
     }
   }
 
@@ -184,6 +255,71 @@ export default function Home() {
     }
   }
 
+
+  async function handleRepoSubmit(event: FormEvent<HTMLFormElement>){
+
+    event.preventDefault();
+
+      if (authStatus !== "authenticated") {
+      setErrorMessage(
+        "Du musst zuerst angemeldet sein."
+      );
+      return;
+    }
+
+    const normalizedRepoUrl = repoUrl.trim();
+
+    if (!normalizedRepoUrl) {
+      setErrorMessage(
+        "Bitte gib eine GitHub-Repository-URL ein."
+      );
+      return;
+    }
+
+
+    setIsSubmitting(true);
+    setErrorMessage(null);
+    setStatusMessage(null);
+
+    try {
+    const response = await submitRepo({
+      repoUrl: normalizedRepoUrl,
+    });
+
+    if (!response.jobId) {
+      throw new Error(
+        "Das Backend hat keine Job-ID zurückgegeben."
+      );
+    }
+
+    router.push(`/dashboard/${response.jobId}`);
+
+   } catch (error) {
+    
+      setErrorMessage(
+          error instanceof Error
+            ? error.message
+            : "Repository konnte nicht eingereicht werden."
+        );
+  } finally {
+    setIsSubmitting(false);
+  }
+ }
+
+ 
+
+  // Wenn der Authentifizierungsstatus noch geladen wird, zeigen wir eine Ladeanzeige an.
+  if (authStatus === "loading") {
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-slate-950 text-slate-100">
+      <p className="text-sm text-slate-300">
+        Anmeldung wird geprüft...
+      </p>
+    </main>
+  );
+}
+
+
   return (
     <main className="min-h-screen overflow-hidden bg-slate-950 text-slate-100">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.22),_transparent_30%),radial-gradient(circle_at_top_right,_rgba(59,130,246,0.18),_transparent_28%),linear-gradient(to_bottom_right,_rgba(15,23,42,1),_rgba(2,6,23,1))]" />
@@ -201,8 +337,9 @@ export default function Home() {
                 Analyze GitHub repos with a clean, modern workflow.
               </h1>
               <p className="max-w-xl text-base leading-7 text-slate-300 sm:text-lg">
-                Sign in or create an account, then connect a repository to start
-                reviewing code quality, patterns, and structure from one place.
+                {authStatus === "authenticated"
+                  ? "Submit a GitHub repository to start reviewing code quality, patterns, and structure."
+                  : "Sign in or create an account, then connect a repository to start reviewing code quality, patterns, and structure from one place."}
               </p>
             </div>
 
@@ -226,13 +363,17 @@ export default function Home() {
           <section className="relative">
             <div className="absolute -inset-4 rounded-[2rem] bg-gradient-to-r from-cyan-500/20 via-sky-500/10 to-indigo-500/20 blur-2xl" />
             <div className="relative rounded-[2rem] border border-white/10 bg-slate-950/85 p-6 shadow-2xl shadow-cyan-950/30 backdrop-blur-xl sm:p-8">
+              {authStatus === "unauthenticated" ? (
               <div className="mb-8 flex items-center justify-between gap-4">
                 <div>
                   <p className="text-sm font-medium uppercase tracking-[0.2em] text-cyan-200/90">
                     Access portal
                   </p>
+
                   <h2 className="mt-2 text-2xl font-semibold text-white">
-                    {mode === "login" ? "Welcome back" : "Create your account"}
+                    {mode === "login"
+                      ? "Welcome back"
+                      : "Create your account"}
                   </h2>
                 </div>
 
@@ -248,6 +389,7 @@ export default function Home() {
                   >
                     Login
                   </button>
+
                   <button
                     type="button"
                     onClick={() => setMode("signup")}
@@ -261,7 +403,19 @@ export default function Home() {
                   </button>
                 </div>
               </div>
+            ) : (
+              <div className="mb-8">
+                <p className="text-sm font-medium uppercase tracking-[0.2em] text-cyan-200/90">
+                  Repository analysis
+                </p>
 
+                <h2 className="mt-2 text-2xl font-semibold text-white">
+                  Repository einreichen
+                </h2>
+              </div>
+            )}
+
+          {authStatus === "unauthenticated" && (
               <div className="mb-6 grid grid-cols-2 gap-3 rounded-2xl border border-white/10 bg-white/5 p-1">
                 <button
                   type="button"
@@ -274,6 +428,7 @@ export default function Home() {
                 >
                   Login
                 </button>
+
                 <button
                   type="button"
                   onClick={() => setMode("signup")}
@@ -286,60 +441,121 @@ export default function Home() {
                   Sign Up
                 </button>
               </div>
+            )}
 
 
-               // Das Formular für Login/Registrierung und Repo-Submission.
-              // Es nutzt die AuthField-Komponente für E-Mail, Passwort und Repo-URL,
-              <form className="space-y-4" onSubmit={handleSubmit}>
-                <AuthField // Das ist das E-Mail-Feld, das die AuthField-Komponente verwendet.
-                  label="Email address"
-                  type="email"
-                  placeholder="you@example.com"
-                  autoComplete="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                />
 
-                <AuthField
-                  label="Password"
-                  type="password"
-                  placeholder="••••••••"
-                  autoComplete={mode === "login" ? "current-password" : "new-password"}
-                  value={password}
-                  onChange={(event) => setPassword(event.target.value)}
-                />
-
-                <label className="block space-y-2">
-                  <span className="text-sm font-medium text-slate-200">
-                    GitHub repository URL
-                  </span>
-                  <input
-                    type="url"
-                    placeholder="https://github.com/owner/repo"
-                    value={repoUrl}
-                    onChange={(event) => setRepoUrl(event.target.value)}
-                    className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 text-slate-100 placeholder:text-slate-500 shadow-sm outline-none transition focus:border-cyan-400/60 focus:ring-4 focus:ring-cyan-400/10"
+            {authStatus === "unauthenticated" ? (
+              <>
+                <form className="space-y-4" onSubmit={handleAuthSubmit}>
+                  {/* E-Mail-Eingabefeld */}
+                  <AuthField
+                    label="Email address"
+                    type="email"
+                    placeholder="you@example.com"
+                    autoComplete="email"
+                    value={email}
+                    onChange={(event) => setEmail(event.target.value)}
                   />
-                </label>
 
-                <div className="grid gap-3 pt-2 sm:grid-cols-2">
-                  <AuthButton type="submit" disabled={isSubmitting}>
-                    {mode === "login" ? "Login to Dashboard" : "Create Account"}
-                  </AuthButton>
+                  <AuthField
+                    label="Password"
+                    type="password"
+                    placeholder="••••••••"
+                    autoComplete={
+                      mode === "login"
+                        ? "current-password"
+                        : "new-password"
+                    }
+                    value={password}
+                    onChange={(event) => setPassword(event.target.value)}
+                  />
+
+                  <div className="grid gap-3 pt-2 sm:grid-cols-2">
+                    <AuthButton
+                      type="submit"
+                      disabled={isSubmitting}
+                    >
+                      {isSubmitting
+                        ? "Bitte warten..."
+                        : mode === "login"
+                          ? "Login to Dashboard"
+                          : "Create Account"}
+                    </AuthButton>
+
+                    <AuthButton
+                      variant="secondary"
+                      type="button"
+                      onClick={handleGithubOAuth}
+                      disabled={isSubmitting}
+                    >
+                      <span className="inline-flex items-center gap-2">
+                        <GithubIcon />
+                        Continue with GitHub
+                      </span>
+                    </AuthButton>
+                  </div>
+                </form>
+              </>
+            ) : (
+              <>
+                <div className="mb-6 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-4">
+                  <div className="flex items-center gap-3">
+                    {currentUser?.avatarUrl && (
+                      <img
+                        src={currentUser.avatarUrl}
+                        alt=""
+                        className="h-12 w-12 rounded-full"
+                      />
+                    )}
+
+                    <div>
+                      <p className="font-semibold text-white">
+                        Angemeldet als{" "}
+                        {currentUser?.name ??
+                          currentUser?.githubLogin ??
+                          "Benutzer"}
+                      </p>
+
+                      {currentUser?.email && (
+                        <p className="mt-1 text-sm text-slate-300">
+                          {currentUser.email}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <form className="space-y-4" onSubmit={handleRepoSubmit}>
+                  <label className="block space-y-2">
+                    <span className="text-sm font-medium text-slate-200">
+                      GitHub repository URL
+                    </span>
+
+                    <input
+                      type="url"
+                      required
+                      placeholder="https://github.com/owner/repo"
+                      value={repoUrl}
+                      onChange={(event) => setRepoUrl(event.target.value)}
+                      className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 text-slate-100 placeholder:text-slate-500 shadow-sm outline-none transition focus:border-cyan-400/60 focus:ring-4 focus:ring-cyan-400/10"
+                    />
+                  </label>
 
                   <AuthButton
-                    variant="secondary"
-                    type="button"
-                    onClick={handleGithubOAuth}
+                    type="submit"
                     disabled={isSubmitting}
                   >
-                    <span className="inline-flex items-center gap-2">
-                      <GithubIcon />
-                      Continue with GitHub
-                    </span>
+                    {isSubmitting
+                      ? "Analyse wird gestartet..."
+                      : "Repository analysieren"}
                   </AuthButton>
-                </div>
-              </form>
+                </form>
+              </>
+            )}
+
+
+                  
 
               {(statusMessage || errorMessage) && (
                 <div
@@ -369,6 +585,7 @@ export default function Home() {
                   </p>
                 </div>
               </div>
+
 
               {/* Login, registration, OAuth, and repo submission now go through the frontend API client. */}
             </div>
