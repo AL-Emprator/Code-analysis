@@ -27,7 +27,7 @@ function getStatusLabel(status: AnalysisJobStatus) {
       return status; // Falls ein unbekannter Status zurückgegeben wird, einfach den Status-String anzeigen
   }
 }
-
+// Die Funktion getStatusClasses gibt die entsprechenden CSS-Klassen für den Status eines Analyse-Jobs zurück, um die visuelle Darstellung im Dashboard zu steuern.
 function getStatusClasses(status: AnalysisJobStatus) {
   switch (status) {
     case "completed":
