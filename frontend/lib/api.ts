@@ -43,7 +43,7 @@ async function request<T>(
         ? String((payload as ApiErrorPayload).message)
         : `Request failed with status ${response.status}`;
 
-    throw new Error(message);
+    throw new Error(message);//
   }
 
   return payload;
