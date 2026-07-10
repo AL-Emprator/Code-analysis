@@ -24,7 +24,7 @@ function getStatusLabel(status: AnalysisJobStatus) {
       return "Analyse fehlgeschlagen";
 
     default:
-      return status;
+      return status; // Falls ein unbekannter Status zurückgegeben wird, einfach den Status-String anzeigen
   }
 }
 
