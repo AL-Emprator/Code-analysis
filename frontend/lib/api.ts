@@ -59,7 +59,7 @@ export async function login(payload: AuthPayload) {
 export async function register(payload: AuthPayload) {
   return request<AuthResponse>("/api/auth/register", {
     method: "POST",
-    body: JSON.stringify(payload),
+    body: JSON.stringify(payload),//
   });
 }
 
