@@ -46,7 +46,7 @@ async function request<T>(
     throw new Error(message);
   }
 
-  return payload;//
+  return payload;
 }
 
 export async function login(payload: AuthPayload) {
@@ -59,7 +59,7 @@ export async function login(payload: AuthPayload) {
 export async function register(payload: AuthPayload) {
   return request<AuthResponse>("/api/auth/register", {
     method: "POST",
-    body: JSON.stringify(payload),
+    body: JSON.stringify(payload),//
   });
 }
 
