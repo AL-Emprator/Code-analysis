@@ -38,6 +38,7 @@ class User(Base):
         index=True,
         nullable=True,
     )
+ 
 
 # Der Name des Benutzers, der optional ist.
     name: Mapped[str | None] = mapped_column(
