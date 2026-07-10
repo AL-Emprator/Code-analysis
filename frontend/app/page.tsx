@@ -30,9 +30,9 @@ import {
   type CurrentUser,
 } from "../lib/api";
 
-import { useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";// useRouter ist ein Hook von Next.js, der uns erlaubt, den Benutzer zu einer anderen Seite weiterzuleiten.
 
-type AuthMode = "login" | "signup";
+type AuthMode = "login" | "signup"; 
 
 // AuthField ist eine wiederverwendbare Komponente für Eingabefelder mit Label, z.B. E-Mail und Passwort.
 function AuthField({
