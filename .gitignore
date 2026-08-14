@@ -1,7 +1,15 @@
-node_modules
-__pycache__
+# Local databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Python environments
+.venv/
+__pycache__/
+
+# Node
+node_modules/
+.next/
+
+# Local environment variables
 .env
-venv
-.next
-dist
-*.pyc
