@@ -1,34 +1,36 @@
 services:
   frontend:
-    build:
-      context: ./frontend
-
+    build: ./frontend
     ports:
       - "3000:3000"
-
     volumes:
       - ./frontend:/app
       - frontend_node_modules:/app/node_modules
-
+    environment:
+      WATCHPACK_POLLING: "true"
     command: npm run dev
 
   backend:
-    build:
-      context: ./backend
-
+    build: ./backend
     ports:
       - "8000:8000"
-
     volumes:
       - ./backend:/app
+      - ./analyzer:/analyzer
       - backend_venv:/app/.venv
+      - analyzer_venv:/analyzer/.venv
+      - analysis_data:/data
+      - ./backend/data:/data
 
     env_file:
       - ./backend/.env
-
     environment:
       PYTHONUNBUFFERED: "1"
-
+      WATCHFILES_FORCE_POLLING: "true"
+      DATABASE_URL: sqlite:////data/code_platform.db
+      REPOSITORY_STORAGE_DIR: /data/repos
+      ANALYZER_COMMAND: uv run python -m app.analyzer
+      ANALYZER_WORKDIR: /analyzer
     command:
       - uv
       - run
@@ -39,9 +41,54 @@ services:
       - --port
       - "8000"
       - --reload
-
     restart: unless-stopped
+
+  worker:
+    build: ./worker
+    volumes:
+      - ./worker:/app
+      - worker_venv:/app/.venv
+      - analysis_data:/data
+      - ./backend/data:/data
+    environment:
+      PYTHONUNBUFFERED: "1"
+      DATABASE_URL: sqlite:////data/code_platform.db
+      REPOSITORY_STORAGE_DIR: /data/repos
+    depends_on:
+      - backend
+    command:
+      - uv
+      - run
+      - python
+      - -m
+      - app.worker
+    restart: unless-stopped
+
+  analyzer:
+    build: ./analyzer
+    volumes:
+      - ./analyzer:/app
+      - analyzer_venv:/app/.venv
+      - analysis_data:/data
+      - ./backend/data:/data
+    environment:
+      PYTHONUNBUFFERED: "1"
+      DATABASE_URL: sqlite:////data/code_platform.db
+      REPOSITORY_STORAGE_DIR: /data/repos
+    depends_on:
+      - backend
+    profiles:
+      - tools
+    command:
+      - uv
+      - run
+      - python
+      - -m
+      - app.analyzer
 
 volumes:
   frontend_node_modules:
   backend_venv:
+  worker_venv:
+  analysis_data:
+  analyzer_venv:

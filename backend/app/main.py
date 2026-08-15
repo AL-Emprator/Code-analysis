@@ -16,6 +16,8 @@ from app.api.auth import router as auth_router
 from app.core.database import Base, engine
 
 from app.models.analysis_job import AnalysisJob
+from app.models.analysis_file import AnalysisFile
+from app.models.analysis_result import AnalysisResult
 from app.models.session import UserSession
 from app.models.user import User
 

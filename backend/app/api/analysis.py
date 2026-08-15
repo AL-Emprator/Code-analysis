@@ -3,12 +3,21 @@ from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
+import os
+import subprocess
 
 from app.core.database import get_db
 from app.models.analysis_job import AnalysisJob
+from app.models.analysis_file import AnalysisFile
+from app.schemas.analysis import AnalysisFileResponse
+from app.models.analysis_result import AnalysisResult
 
 from app.schemas.analysis import (
+    AnalysisJobFilesResponse,
     AnalysisJobResponse,
+    AnalysisResultResponse,
+    StartFileAnalysisRequest,
+    StartFileAnalysisResponse,
     SubmitRepoRequest,
     SubmitRepoResponse,
 )
@@ -147,6 +156,8 @@ async def get_analysis_job(
     database: Session = Depends(get_db),
 ):
 
+
+
     session_token = request.cookies.get("session_id")
 
     if not session_token:
@@ -189,4 +200,219 @@ async def get_analysis_job(
         createdAt=analysis_job.created_at,
         startedAt=analysis_job.started_at,
         completedAt=analysis_job.completed_at,
+    )
+
+
+@router.get(
+    "/jobs/{job_id}/files",
+    response_model=AnalysisJobFilesResponse,
+)
+
+async def get_analysis_job_files(
+    job_id: str,
+    request: Request,
+    database: Session = Depends(get_db),
+):
+    session_token = request.cookies.get("session_id")
+
+    if not session_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Du musst angemeldet sein.",
+        )
+
+    current_user = get_user_from_session_token(
+        database=database,
+        raw_token=session_token,
+    )
+
+    if current_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Die Session ist ungültig oder abgelaufen.",
+        )
+
+    job_statement = select(AnalysisJob).where(
+        AnalysisJob.id == job_id,
+        AnalysisJob.user_id == current_user.id,
+    )
+
+    analysis_job = database.scalar(job_statement)
+
+    if analysis_job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analyse-Job wurde nicht gefunden.",
+        )
+
+    files_statement = (
+        select(AnalysisFile)
+        .where(
+            AnalysisFile.job_id == analysis_job.id,
+            AnalysisFile.is_selectable.is_(True),
+        )
+        .order_by(AnalysisFile.path.asc())
+    )
+
+    files = database.scalars(files_statement).all()
+
+    return AnalysisJobFilesResponse(
+        jobId=analysis_job.id,
+        status=analysis_job.status,
+        files=[
+            AnalysisFileResponse(
+                id=file.id,
+                path=file.path,
+                filename=file.filename,
+                extension=file.extension,
+                language=file.language,
+                sizeBytes=file.size_bytes,
+                selectable=file.is_selectable,
+            )
+            for file in files
+        ],
+    )
+
+
+@router.post(
+    "/jobs/{job_id}/analyze",
+    response_model=StartFileAnalysisResponse,
+)
+async def start_file_analysis(
+    job_id: str,
+    payload: StartFileAnalysisRequest,
+    request: Request,
+    database: Session = Depends(get_db),
+):
+    session_token = request.cookies.get("session_id")
+
+    if not session_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Du musst angemeldet sein.",
+        )
+
+    current_user = get_user_from_session_token(
+        database=database,
+        raw_token=session_token,
+    )
+
+    if current_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Die Session ist ungültig oder abgelaufen.",
+        )
+
+    analysis_job = database.scalar(
+        select(AnalysisJob).where(
+            AnalysisJob.id == job_id,
+            AnalysisJob.user_id == current_user.id,
+        )
+    )
+
+    if analysis_job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analyse-Job wurde nicht gefunden.",
+        )
+
+    analysis_file = database.scalar(
+        select(AnalysisFile).where(
+            AnalysisFile.id == payload.file_id,
+            AnalysisFile.job_id == analysis_job.id,
+        )
+    )
+
+    if analysis_file is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Datei wurde nicht gefunden.",
+        )
+
+    analysis_job.status = "analyzing"
+    database.commit()
+
+    analyzer_command = os.getenv(
+        "ANALYZER_COMMAND",
+        "python -m app.analyzer",
+    )
+
+    subprocess.Popen(
+        [
+            *analyzer_command.split(),
+            analysis_job.id,
+            str(analysis_file.id),
+        ],
+        cwd=os.getenv("ANALYZER_WORKDIR", "/analyzer"),
+    )
+
+    return StartFileAnalysisResponse(
+        jobId=analysis_job.id,
+        fileId=analysis_file.id,
+        status=analysis_job.status,
+    )
+
+
+@router.get(
+    "/jobs/{job_id}/result",
+    response_model=AnalysisResultResponse,
+)
+async def get_analysis_result(
+    job_id: str,
+    request: Request,
+    database: Session = Depends(get_db),
+):
+    session_token = request.cookies.get("session_id")
+
+    if not session_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Du musst angemeldet sein.",
+        )
+
+    current_user = get_user_from_session_token(
+        database=database,
+        raw_token=session_token,
+    )
+
+    if current_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Die Session ist ungültig oder abgelaufen.",
+        )
+
+    analysis_job = database.scalar(
+        select(AnalysisJob).where(
+            AnalysisJob.id == job_id,
+            AnalysisJob.user_id == current_user.id,
+        )
+    )
+
+    if analysis_job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analyse-Job wurde nicht gefunden.",
+        )
+
+    result = database.scalar(
+        select(AnalysisResult)
+        .where(
+            AnalysisResult.job_id == analysis_job.id,
+        )
+        .order_by(AnalysisResult.created_at.desc())
+    )
+
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analyse-Ergebnis wurde noch nicht gefunden.",
+        )
+
+    return AnalysisResultResponse(
+        jobId=result.job_id,
+        fileId=result.file_id,
+        filePath=result.file_path,
+        summary=result.summary,
+        issues=result.issues,
+        createdAt=result.created_at,
     )

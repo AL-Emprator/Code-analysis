@@ -26,6 +26,10 @@ export type SubmitRepoResponse = {
 export type AnalysisJobStatus =
   | "queued"
   | "running"
+  | "cloning"
+  | "indexing"
+  | "ready_for_selection"
+  | "analyzing"
   | "completed"
   | "failed";
 
@@ -42,6 +46,37 @@ export type AnalysisJobResponse = {
 };
 
 
+export type AnalysisFile = {
+  id: number;
+  path: string;
+  filename: string;
+  extension: string | null;
+  language: string | null;
+  sizeBytes: number;
+  selectable: boolean;
+};
+
+export type AnalysisJobFilesResponse = {
+  jobId: string;
+  status: AnalysisJobStatus;
+  files: AnalysisFile[];
+};
+
+export type StartFileAnalysisResponse = {
+  jobId: string;
+  fileId: number;
+  status: AnalysisJobStatus;
+};
+
+export type AnalysisResultResponse = {
+  jobId: string;
+  fileId: number;
+  filePath: string;
+  summary: string;
+  issues: string;
+  createdAt: string;
+};
+
 export async function getAnalysisJob(jobId: string) {
   return request<AnalysisJobResponse>(
     `/api/analysis/jobs/${encodeURIComponent(jobId)}`,
@@ -50,6 +85,37 @@ export async function getAnalysisJob(jobId: string) {
     }
   );
 }
+
+export async function startFileAnalysis(jobId: string, fileId: number) {
+  return request<StartFileAnalysisResponse>(
+    `/api/analysis/jobs/${encodeURIComponent(jobId)}/analyze`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        fileId,
+      }),
+    }
+  );
+}
+
+export async function getAnalysisResult(jobId: string) {
+  return request<AnalysisResultResponse>(
+    `/api/analysis/jobs/${encodeURIComponent(jobId)}/result`,
+    {
+      method: "GET",
+    }
+  );
+}
+
+export async function getAnalysisJobFiles(jobId: string) {
+  return request<AnalysisJobFilesResponse>(
+    `/api/analysis/jobs/${encodeURIComponent(jobId)}/files`,
+    {
+      method: "GET",
+    }
+  );
+}
+
 
 // Das ist der Typ für den aktuellen Benutzer, 
 // der von deinem Backend zurückgegeben wird. 
