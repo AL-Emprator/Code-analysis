@@ -20,6 +20,7 @@ from app.schemas.analysis import (
     StartFileAnalysisResponse,
     SubmitRepoRequest,
     SubmitRepoResponse,
+    PrepareNextAnalysisResponse,
 )
 
 
@@ -362,6 +363,7 @@ async def get_analysis_result(
     request: Request,
     database: Session = Depends(get_db),
 ):
+
     session_token = request.cookies.get("session_id")
 
     if not session_token:
@@ -415,4 +417,64 @@ async def get_analysis_result(
         summary=result.summary,
         issues=result.issues,
         createdAt=result.created_at,
+    )
+
+
+
+@router.post(
+    "/jobs/{job_id}/prepare-next-analysis",
+    response_model=PrepareNextAnalysisResponse,
+)
+async def prepare_next_analysis(
+    job_id: str,
+    request: Request,
+    database: Session = Depends(get_db),
+):
+    session_token = request.cookies.get("session_id")
+
+    if not session_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Du musst angemeldet sein.",
+        )
+
+    current_user = get_user_from_session_token(
+        database=database,
+        raw_token=session_token,
+    )
+
+    if current_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Die Session ist ungültig oder abgelaufen.",
+        )
+
+    analysis_job = database.scalar(
+        select(AnalysisJob).where(
+            AnalysisJob.id == job_id,
+            AnalysisJob.user_id == current_user.id,
+        )
+    )
+
+    if analysis_job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analyse-Job wurde nicht gefunden.",
+        )
+
+    if analysis_job.status not in {"completed", "failed", "ready_for_selection"}:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Der Job kann aktuell nicht zur Dateiauswahl zurückgesetzt werden.",
+        )
+
+    analysis_job.status = "ready_for_selection"
+    analysis_job.error_message = None
+    analysis_job.completed_at = None
+
+    database.commit()
+
+    return PrepareNextAnalysisResponse(
+        jobId=analysis_job.id,
+        status=analysis_job.status,
     )

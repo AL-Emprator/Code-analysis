@@ -235,3 +235,18 @@ export async function getCurrentUser() {
     method: "GET",
   });
 }
+
+
+export type PrepareNextAnalysisResponse = {
+  jobId: string;
+  status: AnalysisJobStatus;
+};
+
+export async function prepareNextAnalysis(jobId: string) {
+  return request<PrepareNextAnalysisResponse>(
+    `/api/analysis/jobs/${encodeURIComponent(jobId)}/prepare-next-analysis`,
+    {
+      method: "POST",
+    }
+  );
+}

@@ -7,9 +7,24 @@ from app.database import create_database_session
 from app.models import AnalysisFile, AnalysisJob, AnalysisResult
 from app.storage import read_repository_file
 
+
+
+#rules bughunting
+from app.findings import Finding, format_findings_as_text
+from app.rules.communication import scan_insecure_communication
+from app.rules.injections import scan_command_injection, scan_sql_injection
+from app.rules.php import scan_php_security
+from app.rules.python import scan_python_security
+from app.rules.secrets import scan_secrets
+from app.rules.xss import scan_xss
+
 #Das ist erstmal eine einfache Analyse ohne KI. Sie zählt Zeilen, Funktionen, Klassen, TODOs und lange Zeilen.
 
-def analyze_code_content(content: str, file_path: str) -> tuple[str, str]:
+def analyze_code_content(
+    content: str,
+    file_path: str,
+    language: str | None,
+) -> tuple[str, str]:
     lines = content.splitlines()
 
     line_count = len(lines)
@@ -27,42 +42,23 @@ def analyze_code_content(content: str, file_path: str) -> tuple[str, str]:
         1 for line in lines if "TODO" in line or "FIXME" in line
     )
 
+    security_findings = run_security_analysis(
+        content=content,
+        file_path=file_path,
+        language=language,
+    )
+
     summary = (
         f"Datei {file_path} wurde analysiert.\n\n"
         f"Zeilen: {line_count}\n"
         f"Zeichen: {character_count}\n"
         f"Funktionen: {function_count}\n"
         f"Klassen: {class_count}\n"
-        f"TODO/FIXME-Kommentare: {todo_count}"
+        f"TODO/FIXME-Kommentare: {todo_count}\n"
+        f"Gefundene Sicherheitsprobleme: {len(security_findings)}"
     )
 
-    issues_list: list[str] = []
-
-    if line_count > 500:
-        issues_list.append(
-            "Die Datei ist sehr groß. Es könnte sinnvoll sein, sie in kleinere Module aufzuteilen."
-        )
-
-    if todo_count > 0:
-        issues_list.append(
-            f"Die Datei enthält {todo_count} TODO/FIXME-Kommentar(e)."
-        )
-
-    long_lines = [
-        index + 1
-        for index, line in enumerate(lines)
-        if len(line) > 120
-    ]
-
-    if long_lines:
-        issues_list.append(
-            f"Es gibt {len(long_lines)} Zeile(n) mit mehr als 120 Zeichen."
-        )
-
-    if not issues_list:
-        issues_list.append("Keine offensichtlichen einfachen Probleme gefunden.")
-
-    issues = "\n".join(f"- {issue}" for issue in issues_list)
+    issues = format_findings_as_text(security_findings)
 
     return summary, issues
 
@@ -101,6 +97,7 @@ def analyze_file(job_id: str, file_id: int) -> None:
         summary, issues = analyze_code_content(
             content=content,
             file_path=analysis_file.path,
+            language=analysis_file.language,
         )
 
         database.execute(
@@ -151,6 +148,31 @@ def analyze_file(job_id: str, file_id: int) -> None:
 
     finally:
         database.close()
+
+
+# Rules for security analysis 
+def run_security_analysis(
+    content: str,
+    file_path: str,
+    language: str | None,
+) -> list[Finding]:
+    findings: list[Finding] = []
+
+    findings.extend(scan_secrets(content))
+    findings.extend(scan_insecure_communication(content))
+    findings.extend(scan_sql_injection(content))
+    findings.extend(scan_command_injection(content))
+    findings.extend(scan_xss(content))
+
+    lower_file_path = file_path.lower()
+
+    if lower_file_path.endswith(".php") or language == "PHP":
+        findings.extend(scan_php_security(content))
+
+    if lower_file_path.endswith(".py") or language == "Python":
+        findings.extend(scan_python_security(content))
+
+    return findings
 
 
 def main() -> None:

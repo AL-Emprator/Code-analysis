@@ -90,3 +90,11 @@ class AnalysisJobFilesResponse(BaseModel):
     job_id: str = Field(alias="jobId")
     status: str
     files: list[AnalysisFileResponse]
+
+
+
+class PrepareNextAnalysisResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    job_id: str = Field(alias="jobId")
+    status: str
