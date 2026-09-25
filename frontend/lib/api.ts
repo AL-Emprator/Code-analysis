@@ -77,6 +77,39 @@ export type AnalysisResultResponse = {
   createdAt: string;
 };
 
+export type AnalysisResultsResponse = {
+  jobId: string;
+  status: AnalysisJobStatus;
+  results: AnalysisResultResponse[];
+};
+
+
+
+export async function getAnalysisResults(jobId: string) {
+  return request<AnalysisResultsResponse>(
+    `/api/analysis/jobs/${encodeURIComponent(jobId)}/results`,
+    {
+      method: "GET",
+    }
+  );
+}
+
+export type StartRepositoryAnalysisResponse = {
+  jobId: string;
+  status: AnalysisJobStatus;
+};
+
+
+export async function startRepositoryAnalysis(jobId: string) {
+  return request<StartRepositoryAnalysisResponse>(
+    `/api/analysis/jobs/${encodeURIComponent(jobId)}/analyze-repository`,
+    {
+      method: "POST",
+    }
+  );
+}
+
+
 export async function getAnalysisJob(jobId: string) {
   return request<AnalysisJobResponse>(
     `/api/analysis/jobs/${encodeURIComponent(jobId)}`,

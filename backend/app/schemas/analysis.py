@@ -91,10 +91,24 @@ class AnalysisJobFilesResponse(BaseModel):
     status: str
     files: list[AnalysisFileResponse]
 
-
-
 class PrepareNextAnalysisResponse(BaseModel):
+
     model_config = ConfigDict(populate_by_name=True)
 
     job_id: str = Field(alias="jobId")
     status: str
+
+
+class StartRepositoryAnalysisResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    job_id: str = Field(alias="jobId")
+    status: str
+
+
+class AnalysisResultsResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    job_id: str = Field(alias="jobId")
+    status: str
+    results: list[AnalysisResultResponse]

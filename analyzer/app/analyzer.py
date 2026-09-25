@@ -63,6 +63,7 @@ def analyze_code_content(
     return summary, issues
 
 
+# Analyze a single file for a given job
 def analyze_file(job_id: str, file_id: int) -> None:
     database = create_database_session()
 
@@ -150,6 +151,123 @@ def analyze_file(job_id: str, file_id: int) -> None:
         database.close()
 
 
+
+def analyze_repository(job_id: str) -> None:
+    database = create_database_session()
+
+    try:
+        job = database.scalar(
+            select(AnalysisJob).where(
+                AnalysisJob.id == job_id,
+            )
+        )
+
+        if job is None:
+            raise ValueError("Analyse-Job wurde nicht gefunden.")
+
+        job.status = "analyzing"
+        job.error_message = None
+        database.commit()
+
+        analysis_files = database.scalars(
+            select(AnalysisFile)
+            .where(
+                AnalysisFile.job_id == job.id,
+                AnalysisFile.is_selectable.is_(True),
+            )
+            .order_by(AnalysisFile.path.asc())
+        ).all()
+
+        if not analysis_files:
+            raise ValueError("Keine analysierbaren Dateien gefunden.")
+
+        analyzed_count = 0
+        failed_files: list[str] = []
+
+        for analysis_file in analysis_files:
+            try:
+                content = read_repository_file(
+                    job_id=job.id,
+                    file_path=analysis_file.path,
+                )
+
+                summary, issues = analyze_code_content(
+                    content=content,
+                    file_path=analysis_file.path,
+                    language=analysis_file.language,
+                )
+
+                database.execute(
+                    delete(AnalysisResult).where(
+                        AnalysisResult.job_id == job.id,
+                        AnalysisResult.file_id == analysis_file.id,
+                    )
+                )
+
+                database.add(
+                    AnalysisResult(
+                        job_id=job.id,
+                        file_id=analysis_file.id,
+                        file_path=analysis_file.path,
+                        summary=summary,
+                        issues=issues,
+                        created_at=datetime.now(timezone.utc),
+                    )
+                )
+
+                analyzed_count += 1
+
+            except Exception as file_error:
+                failed_files.append(
+                    f"{analysis_file.path}: {file_error}"
+                )
+
+        if analyzed_count == 0:
+            raise ValueError(
+                "Keine Datei konnte analysiert werden. "
+                + "; ".join(failed_files[:5])
+            )
+
+        job.status = "completed"
+        job.completed_at = datetime.now(timezone.utc)
+
+        if failed_files:
+            job.error_message = (
+                f"{analyzed_count} Datei(en) analysiert. "
+                f"{len(failed_files)} Datei(en) konnten nicht analysiert werden."
+            )
+        else:
+            job.error_message = None
+
+        database.commit()
+
+        print(
+            f"[analyzer] Repository analysis completed for job={job.id}, "
+            f"files={analyzed_count}, failed={len(failed_files)}"
+        )
+
+    except Exception as error:
+        database.rollback()
+
+        job = database.scalar(
+            select(AnalysisJob).where(
+                AnalysisJob.id == job_id,
+            )
+        )
+
+        if job is not None:
+            job.status = "failed"
+            job.error_message = str(error)
+            job.completed_at = datetime.now(timezone.utc)
+            database.commit()
+
+        print(f"[analyzer] Repository analysis failed: {error}")
+        raise
+
+    finally:
+        database.close()
+
+        
 # Rules for security analysis 
 def run_security_analysis(
     content: str,
@@ -175,18 +293,46 @@ def run_security_analysis(
     return findings
 
 
+
 def main() -> None:
-    if len(sys.argv) != 3:
-        print("Usage: python -m app.analyzer <job_id> <file_id>")
+    if len(sys.argv) not in {3, 4}:
+        print("Usage:")
+        print("  Datei analysieren: python -m app.analyzer file <job_id> <file_id>")
+        print("  Repo analysieren:  python -m app.analyzer repo <job_id>")
         raise SystemExit(1)
 
-    job_id = sys.argv[1]
-    file_id = int(sys.argv[2])
+    mode = sys.argv[1]
 
-    analyze_file(
-        job_id=job_id,
-        file_id=file_id,
-    )
+    if mode == "file":
+        if len(sys.argv) != 4:
+            print("Usage: python -m app.analyzer file <job_id> <file_id>")
+            raise SystemExit(1)
+
+        job_id = sys.argv[2]
+        file_id = int(sys.argv[3])
+
+        analyze_file(
+            job_id=job_id,
+            file_id=file_id,
+        )
+
+        return
+
+    if mode == "repo":
+        if len(sys.argv) != 3:
+            print("Usage: python -m app.analyzer repo <job_id>")
+            raise SystemExit(1)
+
+        job_id = sys.argv[2]
+
+        analyze_repository(
+            job_id=job_id,
+        )
+
+        return
+
+    print(f"Unbekannter Analyse-Modus: {mode}")
+    raise SystemExit(1)
 
 
 if __name__ == "__main__":

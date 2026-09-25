@@ -21,6 +21,8 @@ from app.schemas.analysis import (
     SubmitRepoRequest,
     SubmitRepoResponse,
     PrepareNextAnalysisResponse,
+    StartRepositoryAnalysisResponse,
+    AnalysisResultsResponse,
 )
 
 
@@ -333,18 +335,28 @@ async def start_file_analysis(
     analysis_job.status = "analyzing"
     database.commit()
 
+
+    analyzer_workdir = os.getenv("ANALYZER_WORKDIR", "/analyzer")
+
+    if not os.path.isdir(analyzer_workdir):
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Analyzer-Verzeichnis wurde nicht gefunden: {analyzer_workdir}",
+        )
+
     analyzer_command = os.getenv(
         "ANALYZER_COMMAND",
-        "python -m app.analyzer",
+        "uv run python -m app.analyzer",
     )
 
     subprocess.Popen(
         [
             *analyzer_command.split(),
+            "file",
             analysis_job.id,
             str(analysis_file.id),
         ],
-        cwd=os.getenv("ANALYZER_WORKDIR", "/analyzer"),
+        cwd=analyzer_workdir,
     )
 
     return StartFileAnalysisResponse(
@@ -352,6 +364,94 @@ async def start_file_analysis(
         fileId=analysis_file.id,
         status=analysis_job.status,
     )
+
+
+
+@router.post(
+    "/jobs/{job_id}/analyze-repository",
+    response_model=StartRepositoryAnalysisResponse,
+)
+
+async def start_repository_analysis(
+    job_id: str,
+    request: Request,
+    database: Session = Depends(get_db),
+):
+    session_token = request.cookies.get("session_id")
+
+    if not session_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Du musst angemeldet sein.",
+        )
+
+    current_user = get_user_from_session_token(
+        database=database,
+        raw_token=session_token,
+    )
+
+    if current_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Die Session ist ungültig oder abgelaufen.",
+        )
+
+    analysis_job = database.scalar(
+        select(AnalysisJob).where(
+            AnalysisJob.id == job_id,
+            AnalysisJob.user_id == current_user.id,
+        )
+    )
+
+    if analysis_job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analyse-Job wurde nicht gefunden.",
+        )
+
+    if analysis_job.status not in {
+        "ready_for_selection",
+        "completed",
+        "failed",
+    }:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Das Repository kann aktuell nicht analysiert werden.",
+        )
+
+    analysis_job.status = "analyzing"
+    analysis_job.error_message = None
+    analysis_job.completed_at = None
+    database.commit()
+
+    analyzer_workdir = os.getenv("ANALYZER_WORKDIR", "/analyzer")
+
+    if not os.path.isdir(analyzer_workdir):
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Anas lyzer-Verzeichnis wurde nicht gefunden: {analyzer_workdir}",
+        )
+
+    analyzer_command = os.getenv(
+    "ANALYZER_COMMAND",
+    "uv run python -m app.analyzer",
+    )
+
+    subprocess.Popen(
+    [
+        *analyzer_command.split(),
+        "repo",
+        analysis_job.id,
+    ],
+    cwd=analyzer_workdir,
+    )
+
+    return StartRepositoryAnalysisResponse(
+        jobId=analysis_job.id,
+        status=analysis_job.status,
+    )
+
+
 
 
 @router.get(
@@ -430,6 +530,7 @@ async def prepare_next_analysis(
     request: Request,
     database: Session = Depends(get_db),
 ):
+
     session_token = request.cookies.get("session_id")
 
     if not session_token:
@@ -478,3 +579,69 @@ async def prepare_next_analysis(
         jobId=analysis_job.id,
         status=analysis_job.status,
     )
+
+
+
+
+@router.get("/jobs/{job_id}/results", response_model=AnalysisResultsResponse)
+async def get_analysis_results(
+    job_id: str,
+    request: Request,
+    database: Session = Depends(get_db),
+):
+
+    session_token = request.cookies.get("session_id")
+    if not session_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Du musst angemeldet sein.",
+        )
+    
+    current_user = get_user_from_session_token(
+        database=database,
+        raw_token=session_token,
+    )
+
+    if current_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Die Session ist ungültig oder abgelaufen.",
+        )
+    
+    analysis_job = database.scalar(
+        select(AnalysisJob).where(
+            AnalysisJob.id == job_id,
+            AnalysisJob.user_id == current_user.id,
+        )
+    )
+
+
+    if analysis_job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analyse-Job wurde nicht gefunden.",
+        )
+
+    
+    results = database.scalars(
+        select(AnalysisResult)
+        .where(AnalysisResult.job_id == analysis_job.id)
+        .order_by(AnalysisResult.file_path.asc(), AnalysisResult.created_at.desc())
+    ).all()
+
+    return AnalysisResultsResponse(
+        jobId=analysis_job.id,
+        status=analysis_job.status,
+        results=[
+            AnalysisResultResponse(
+                jobId=result.job_id,
+                fileId=result.file_id,
+                filePath=result.file_path,
+                summary=result.summary,
+                issues=result.issues,
+                createdAt=result.created_at,
+            )
+            for result in results
+        ],
+    )
+

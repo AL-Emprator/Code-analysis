@@ -7,8 +7,10 @@ import {
   getAnalysisJob,
   getAnalysisJobFiles,
   getAnalysisResult,
-  startFileAnalysis,
+  getAnalysisResults,
   prepareNextAnalysis,
+  startFileAnalysis,
+  startRepositoryAnalysis,
   type AnalysisFile,
   type AnalysisJobResponse,
   type AnalysisJobStatus,
@@ -331,7 +333,12 @@ export default function AnalysisDashboardPage() {
 
   const [analysisResult, setAnalysisResult] =
     useState<AnalysisResultResponse | null>(null);
+  const [analysisResults, setAnalysisResults] = useState<
+    AnalysisResultResponse[]
+  >([]);
   const [isStartingAnalysis, setIsStartingAnalysis] = useState(false);
+  const [isStartingRepositoryAnalysis, setIsStartingRepositoryAnalysis] =
+    useState(false);
   const [isLoadingResult, setIsLoadingResult] = useState(false);
   const [analysisErrorMessage, setAnalysisErrorMessage] = useState<
     string | null
@@ -485,6 +492,54 @@ export default function AnalysisDashboardPage() {
     };
   }, [jobId, job?.status]);
 
+  useEffect(() => {
+    if (!jobId || job?.status !== "completed") {
+      return;
+    }
+
+    let isCancelled = false;
+
+    async function loadAllResults() {
+      try {
+        setIsLoadingResult(true);
+        setAnalysisErrorMessage(null);
+
+        const response = await getAnalysisResults(jobId);
+        const results = response.results ?? [];
+
+        if (isCancelled) {
+          return;
+        }
+
+        setAnalysisResults(results);
+
+        if (results.length === 1) {
+          setAnalysisResult(results[0]);
+        } else {
+          setAnalysisResult(null);
+        }
+      } catch (error) {
+        if (!isCancelled) {
+          setAnalysisErrorMessage(
+            error instanceof Error
+              ? error.message
+              : "Analyse-Ergebnisse konnten nicht geladen werden."
+          );
+        }
+      } finally {
+        if (!isCancelled) {
+          setIsLoadingResult(false);
+        }
+      }
+    }
+
+    void loadAllResults();
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [jobId, job?.status]);
+
   async function handleStartAnalysis() {
     if (!jobId || !selectedFileId || isStartingAnalysis) {
       return;
@@ -501,6 +556,7 @@ export default function AnalysisDashboardPage() {
       setIsStartingAnalysis(true);
       setAnalysisErrorMessage(null);
       setAnalysisResult(null);
+      setAnalysisResults([]);
 
       await startFileAnalysis(jobId, fileId);
 
@@ -526,6 +582,41 @@ export default function AnalysisDashboardPage() {
     }
   }
 
+  async function handleStartRepositoryAnalysis() {
+    if (!jobId) {
+      return;
+    }
+
+    try {
+      setIsStartingRepositoryAnalysis(true);
+      setAnalysisErrorMessage(null);
+      setAnalysisResult(null);
+      setAnalysisResults([]);
+
+      await startRepositoryAnalysis(jobId);
+
+      const refreshedJob = await getAnalysisJob(jobId);
+      setJob(refreshedJob);
+
+      // Mark an analysis as running so the polling effect (which depends on
+      // analysisWasStarted) re-triggers and keeps polling past
+      // "ready_for_selection" through "analyzing"/"running" until the job
+      // reaches "completed" or "failed". Without this, polling could already
+      // be idle (e.g. it stopped while sitting at ready_for_selection) and
+      // would never pick the job back up.
+      setAnalysisWasStarted(true);
+    } catch (error) {
+      setAnalysisWasStarted(false);
+      setAnalysisErrorMessage(
+        error instanceof Error
+          ? error.message
+          : "Repository-Analyse konnte nicht gestartet werden."
+      );
+    } finally {
+      setIsStartingRepositoryAnalysis(false);
+    }
+  }
+
   async function handlePrepareNextAnalysis() {
     if (!jobId) {
       return;
@@ -534,6 +625,7 @@ export default function AnalysisDashboardPage() {
     try {
       setErrorMessage(null);
       setAnalysisResult(null);
+      setAnalysisResults([]);
 
       await prepareNextAnalysis(jobId);
 
@@ -763,7 +855,7 @@ export default function AnalysisDashboardPage() {
                   <select
                     value={selectedFileId}
                     onChange={(event) => setSelectedFileId(event.target.value)}
-                    disabled={isStartingAnalysis}
+                    disabled={isStartingAnalysis || isStartingRepositoryAnalysis}
                     className="w-full rounded-xl border border-white/10 bg-slate-950/70 px-4 py-3 text-slate-100 outline-none transition focus:border-cyan-400/60 focus:ring-4 focus:ring-cyan-400/10 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {files.map((file) => (
@@ -798,19 +890,33 @@ export default function AnalysisDashboardPage() {
                   })()}
                 </label>
 
-                <button
-                  type="button"
-                  onClick={() => void handleStartAnalysis()}
-                  disabled={!selectedFileId || isStartingAnalysis}
-                  className="inline-flex h-fit items-center justify-center gap-2 whitespace-nowrap rounded-xl bg-gradient-to-r from-cyan-400 to-indigo-500 px-5 py-3 text-sm font-semibold text-slate-950 transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-60"
-                >
-                  {isStartingAnalysis && (
-                    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-950/30 border-t-slate-950" />
-                  )}
-                  {isStartingAnalysis
-                    ? "Analyse wird gestartet..."
-                    : "Ausgewählte Datei analysieren"}
-                </button>
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={() => void handleStartAnalysis()}
+                    disabled={
+                      !selectedFileId ||
+                      isStartingAnalysis ||
+                      isStartingRepositoryAnalysis
+                    }
+                    className="rounded-xl bg-gradient-to-r from-cyan-400 to-indigo-500 px-5 py-3 text-sm font-semibold text-slate-950 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isStartingAnalysis
+                      ? "Analyse wird gestartet..."
+                      : "Ausgewählte Datei analysieren"}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => void handleStartRepositoryAnalysis()}
+                    disabled={isStartingAnalysis || isStartingRepositoryAnalysis}
+                    className="rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-5 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/20 disabled:cursor-not-allowed disabled:opacity-60"
+                  >
+                    {isStartingRepositoryAnalysis
+                      ? "Repository-Analyse wird gestartet..."
+                      : "Ganzes Repository analysieren"}
+                  </button>
+                </div>
               </div>
             )}
           </section>
@@ -953,6 +1059,75 @@ export default function AnalysisDashboardPage() {
               >
                 Andere Datei analysieren
               </button>
+            </div>
+          </section>
+        )}
+
+        {/* Repository result (multiple files) */}
+        {analysisResults.length > 1 && (
+          <section className="mt-8 rounded-3xl border border-emerald-500/20 bg-emerald-500/10 p-6 sm:p-8">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h2 className="text-xl font-semibold text-white">
+                  Repository-Analyse Ergebnis
+                </h2>
+
+                <p className="mt-2 text-sm text-slate-300">
+                  Es wurden {analysisResults.length} Dateien analysiert.
+                </p>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => void handlePrepareNextAnalysis()}
+                className="rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-5 py-3 text-sm font-semibold text-cyan-100 transition hover:bg-cyan-400/20"
+              >
+                Andere Analyse starten
+              </button>
+            </div>
+
+            <div className="mt-6 space-y-4">
+              {analysisResults.map((result) => (
+                <article
+                  key={`${result.fileId}-${result.createdAt}`}
+                  className="rounded-2xl border border-white/10 bg-slate-950/60 p-5"
+                >
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <h3 className="break-all font-semibold text-white">
+                        {result.filePath}
+                      </h3>
+
+                      <p className="mt-1 text-xs text-slate-400">
+                        Analysiert am:{" "}
+                        {new Date(result.createdAt).toLocaleString("de-DE")}
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid gap-4 lg:grid-cols-2">
+                    <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                      <h4 className="text-sm font-semibold text-slate-100">
+                        Zusammenfassung
+                      </h4>
+
+                      <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap text-sm leading-6 text-slate-300">
+                        {result.summary}
+                      </pre>
+                    </div>
+
+                    <div className="rounded-xl border border-white/10 bg-white/5 p-4">
+                      <h4 className="text-sm font-semibold text-slate-100">
+                        Gefundene Hinweise
+                      </h4>
+
+                      <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap text-sm leading-6 text-slate-300">
+                        {result.issues}
+                      </pre>
+                    </div>
+                  </div>
+                </article>
+              ))}
             </div>
           </section>
         )}
