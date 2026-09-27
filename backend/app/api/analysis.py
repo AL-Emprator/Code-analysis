@@ -2,6 +2,7 @@ import secrets
 from urllib.parse import urlparse
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.responses import Response
 from sqlalchemy.orm import Session
 import os
 import subprocess
@@ -23,6 +24,10 @@ from app.schemas.analysis import (
     PrepareNextAnalysisResponse,
     StartRepositoryAnalysisResponse,
     AnalysisResultsResponse,
+
+    UserAnalysisJobResponse,
+    UserAnalysisJobsResponse,
+    UserAnalysisStatsResponse,
 )
 
 
@@ -645,3 +650,190 @@ async def get_analysis_results(
         ],
     )
 
+
+
+def get_current_user_from_request(
+    request: Request,
+    database: Session,
+):
+    session_token = request.cookies.get("session_id")
+
+    if not session_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Du musst angemeldet sein.",
+        )
+
+    current_user = get_user_from_session_token(
+        database=database,
+        raw_token=session_token,
+    )
+
+    if current_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Die Session ist ungültig oder abgelaufen.",
+        )
+
+    return current_user
+
+
+
+@router.get("/my-jobs", response_model=UserAnalysisJobsResponse)
+async def get_my_analysis_jobs(
+    request: Request,
+    database: Session = Depends(get_db),
+):
+    current_user = get_current_user_from_request(
+        request=request,
+        database=database,
+    )
+
+    jobs = database.scalars(
+        select(AnalysisJob)
+        .where(AnalysisJob.user_id == current_user.id)
+        .order_by(AnalysisJob.created_at.desc())
+    ).all()
+
+    return UserAnalysisJobsResponse(
+        jobs=[
+            UserAnalysisJobResponse(
+                jobId=job.id,
+                repoUrl=job.repo_url,
+                repositoryOwner=job.repository_owner,
+                repositoryName=job.repository_name,
+                status=job.status,
+                createdAt=job.created_at,
+                completedAt=job.completed_at,
+            )
+            for job in jobs
+        ]
+    )
+
+
+
+@router.get("/my-stats", response_model=UserAnalysisStatsResponse)
+async def get_my_analysis_stats(
+    request: Request,
+    database: Session = Depends(get_db),
+):
+    current_user = get_current_user_from_request(
+        request=request,
+        database=database,
+    )
+
+    jobs = database.scalars(
+        select(AnalysisJob).where(
+            AnalysisJob.user_id == current_user.id
+        )
+    ).all()
+
+    job_ids = [job.id for job in jobs]
+
+    total_files = 0
+    total_results = 0
+
+    if job_ids:
+        total_files = len(
+            database.scalars(
+                select(AnalysisFile).where(
+                    AnalysisFile.job_id.in_(job_ids)
+                )
+            ).all()
+        )
+
+        total_results = len(
+            database.scalars(
+                select(AnalysisResult).where(
+                    AnalysisResult.job_id.in_(job_ids)
+                )
+            ).all()
+        )
+
+    return UserAnalysisStatsResponse(
+        totalJobs=len(jobs),
+        completedJobs=sum(1 for job in jobs if job.status == "completed"),
+        failedJobs=sum(1 for job in jobs if job.status == "failed"),
+        totalFiles=total_files,
+        totalResults=total_results,
+    )
+
+
+
+@router.get("/jobs/{job_id}/export-markdown")
+async def export_analysis_report_markdown(
+    job_id: str,
+    request: Request,
+    database: Session = Depends(get_db),
+):
+    current_user = get_current_user_from_request(
+        request=request,
+        database=database,
+    )
+
+    analysis_job = database.scalar(
+        select(AnalysisJob).where(
+            AnalysisJob.id == job_id,
+            AnalysisJob.user_id == current_user.id,
+        )
+    )
+
+    if analysis_job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analyse-Job wurde nicht gefunden.",
+        )
+
+    results = database.scalars(
+        select(AnalysisResult)
+        .where(AnalysisResult.job_id == analysis_job.id)
+        .order_by(AnalysisResult.file_path.asc())
+    ).all()
+
+    markdown_parts = [
+        "# Code-Analyse Report",
+        "",
+        f"Repository: {analysis_job.repository_owner}/{analysis_job.repository_name}",
+        f"URL: {analysis_job.repo_url}",
+        f"Status: {analysis_job.status}",
+        f"Erstellt am: {analysis_job.created_at}",
+        f"Abgeschlossen am: {analysis_job.completed_at}",
+        "",
+        "---",
+        "",
+    ]
+
+    if not results:
+        markdown_parts.append(
+            "Es wurden noch keine Analyse-Ergebnisse gefunden."
+        )
+    else:
+        for result in results:
+            markdown_parts.extend(
+                [
+                    f"## Datei: {result.file_path}",
+                    "",
+                    "### Zusammenfassung",
+                    "",
+                    result.summary,
+                    "",
+                    "### Gefundene Hinweise",
+                    "",
+                    result.issues,
+                    "",
+                    "---",
+                    "",
+                ]
+            )
+
+    markdown_content = "\n".join(markdown_parts)
+
+    filename = f"{analysis_job.repository_name}-analysis-report.md"
+
+    return Response(
+        content=markdown_content,
+        media_type="text/markdown",
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"'
+        },
+    )

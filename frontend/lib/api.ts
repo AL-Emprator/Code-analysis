@@ -85,6 +85,72 @@ export type AnalysisResultsResponse = {
 
 
 
+export type UserAnalysisJob = {
+  jobId: string;
+  repoUrl: string;
+  repositoryOwner: string;
+  repositoryName: string;
+  status: AnalysisJobStatus;
+  createdAt: string;
+  completedAt: string | null;
+};
+
+
+export type UserAnalysisJobsResponse = {
+  jobs: UserAnalysisJob[];
+};
+
+
+export type UserAnalysisStatsResponse = {
+  totalJobs: number;
+  completedJobs: number;
+  failedJobs: number;
+  totalFiles: number;
+  totalResults: number;
+};
+
+export type GitHubRepository = {
+  id: number;
+  name: string;
+  fullName: string;
+  htmlUrl: string;
+  description: string | null;
+  private: boolean;
+  fork: boolean;
+  language: string | null;
+  updatedAt: string | null;
+};
+
+export type GitHubRepositoriesResponse = {
+  repositories: GitHubRepository[];
+};
+
+export async function getGitHubRepositories() {
+  return request<GitHubRepositoriesResponse>("/api/github/repositories", {
+    method: "GET",
+  });
+}
+
+
+export async function getMyAnalysisJobs() {
+  return request<UserAnalysisJobsResponse>("/api/analysis/my-jobs", {
+    method: "GET",
+  });
+}
+
+export async function getMyAnalysisStats() {
+  return request<UserAnalysisStatsResponse>("/api/analysis/my-stats", {
+    method: "GET",
+  });
+}
+
+export function getMarkdownExportUrl(jobId: string) {
+  return `${API_BASE_URL}/api/analysis/jobs/${encodeURIComponent(
+    jobId
+  )}/export-markdown`;
+}
+
+
 export async function getAnalysisResults(jobId: string) {
   return request<AnalysisResultsResponse>(
     `/api/analysis/jobs/${encodeURIComponent(jobId)}/results`,
@@ -148,6 +214,7 @@ export async function getAnalysisJobFiles(jobId: string) {
     }
   );
 }
+
 
 
 // Das ist der Typ für den aktuellen Benutzer, 

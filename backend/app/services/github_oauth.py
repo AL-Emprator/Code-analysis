@@ -25,7 +25,7 @@ def create_github_authorization_url() -> tuple[str, str]:
         {
             "client_id": settings.github_client_id,
             "redirect_uri": settings.github_callback_url,
-            "scope": "read:user user:email",
+            "scope": "read:user user:email public_repo",
             "state": state,
         }
     )

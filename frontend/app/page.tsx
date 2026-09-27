@@ -321,11 +321,52 @@ export default function Home() {
 
 
   return (
-    <main className="min-h-screen overflow-hidden bg-slate-950 text-slate-100">
+    <main className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_left,_rgba(34,211,238,0.22),_transparent_30%),radial-gradient(circle_at_top_right,_rgba(59,130,246,0.18),_transparent_28%),linear-gradient(to_bottom_right,_rgba(15,23,42,1),_rgba(2,6,23,1))]" />
       <div className="absolute inset-0 bg-[linear-gradient(rgba(148,163,184,0.05)_1px,transparent_1px),linear-gradient(90deg,rgba(148,163,184,0.05)_1px,transparent_1px)] bg-[size:64px_64px] opacity-20" />
 
-      <div className="relative mx-auto flex min-h-screen max-w-7xl items-center px-4 py-10 sm:px-6 lg:px-8">
+      {/* Top-right profile card: quick, visible access to /profile when signed in. */}
+      {currentUser && (
+        <button
+          type="button"
+          onClick={() => router.push("/profile")}
+          className="absolute right-4 top-4 z-20 flex max-w-[15rem] origin-top-right scale-90 items-center gap-3 rounded-2xl border border-cyan-400/30 bg-slate-950/70 p-3 text-left shadow-2xl shadow-cyan-950/30 backdrop-blur-xl transition hover:border-cyan-300 hover:bg-cyan-400/10 sm:right-6 sm:top-6 sm:max-w-xs sm:scale-100"
+        >
+          {currentUser.avatarUrl ? (
+            <img
+              src={currentUser.avatarUrl}
+              alt={currentUser.githubLogin}
+              className="h-11 w-11 shrink-0 rounded-full object-cover"
+            />
+          ) : (
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-cyan-400/20 text-sm font-semibold text-cyan-100">
+              {(currentUser.name ?? currentUser.githubLogin ?? "P")
+                .slice(0, 1)
+                .toUpperCase()}
+            </div>
+          )}
+
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-white">
+              {currentUser.name ?? currentUser.githubLogin}
+            </p>
+
+            <p className="truncate text-xs text-slate-300">
+              {currentUser.email ?? `@${currentUser.githubLogin}`}
+            </p>
+
+            <p className="mt-1 text-xs font-medium text-cyan-200">
+              Profil öffnen
+            </p>
+          </div>
+        </button>
+      )}
+
+      <div
+        className={`relative mx-auto flex min-h-screen max-w-7xl items-center px-4 py-10 sm:px-6 lg:px-8 ${
+          currentUser ? "pt-24 sm:pt-10" : ""
+        }`}
+      >
         <div className="grid w-full items-center gap-10 lg:grid-cols-[1.05fr_0.95fr]">
           <section className="max-w-2xl space-y-6">
             <span className="inline-flex items-center rounded-full border border-cyan-400/20 bg-cyan-400/10 px-4 py-2 text-xs font-medium uppercase tracking-[0.24em] text-cyan-200">
@@ -525,6 +566,9 @@ export default function Home() {
                     </div>
                   </div>
                 </div>
+
+
+                
 
                 <form className="space-y-4" onSubmit={handleRepoSubmit}>
                   <label className="block space-y-2">

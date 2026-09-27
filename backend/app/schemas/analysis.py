@@ -112,3 +112,33 @@ class AnalysisResultsResponse(BaseModel):
     job_id: str = Field(alias="jobId")
     status: str
     results: list[AnalysisResultResponse]
+
+
+
+
+class UserAnalysisJobResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    job_id: str = Field(alias="jobId")
+    repo_url: str = Field(alias="repoUrl")
+    repository_owner: str = Field(alias="repositoryOwner")
+    repository_name: str = Field(alias="repositoryName")
+    status: str
+    created_at: datetime = Field(alias="createdAt")
+    completed_at: datetime | None = Field(default=None, alias="completedAt")
+
+
+class UserAnalysisJobsResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    jobs: list[UserAnalysisJobResponse]
+
+
+class UserAnalysisStatsResponse(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    total_jobs: int = Field(alias="totalJobs")
+    completed_jobs: int = Field(alias="completedJobs")
+    failed_jobs: int = Field(alias="failedJobs")
+    total_files: int = Field(alias="totalFiles")
+    total_results: int = Field(alias="totalResults")

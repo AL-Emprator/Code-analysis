@@ -21,6 +21,8 @@ from app.models.analysis_result import AnalysisResult
 from app.models.session import UserSession
 from app.models.user import User
 
+from app.api.github import router as github_router
+
 Base.metadata.create_all(bind=engine)
 
 
@@ -36,6 +38,7 @@ app.add_middleware(
 
 app.include_router(auth_router)
 app.include_router(analysis_router)
+app.include_router(github_router)
 
 
 @app.get("/", response_class=HTMLResponse)

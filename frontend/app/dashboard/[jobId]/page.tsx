@@ -11,6 +11,8 @@ import {
   prepareNextAnalysis,
   startFileAnalysis,
   startRepositoryAnalysis,
+  getCurrentUser,
+  type CurrentUser,
   type AnalysisFile,
   type AnalysisJobResponse,
   type AnalysisJobStatus,
@@ -345,6 +347,8 @@ export default function AnalysisDashboardPage() {
   >(null);
   const [analysisWasStarted, setAnalysisWasStarted] = useState(false);
 
+  const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
+
   useEffect(() => {
     if (!jobId) {
       setErrorMessage("Die Job-ID fehlt.");
@@ -540,6 +544,24 @@ export default function AnalysisDashboardPage() {
     };
   }, [jobId, job?.status]);
 
+
+  useEffect(() => {
+  async function loadCurrentUser() {
+    try {
+      const response = await getCurrentUser();
+
+      if (response.authenticated) {
+        setCurrentUser(response.user);
+      }
+    } catch {
+      setCurrentUser(null);
+    }
+  }
+
+  void loadCurrentUser();
+}, []);
+
+
   async function handleStartAnalysis() {
     if (!jobId || !selectedFileId || isStartingAnalysis) {
       return;
@@ -709,6 +731,27 @@ export default function AnalysisDashboardPage() {
               job.status
             )}`}
           >
+
+            <button
+              type="button"
+              onClick={() => router.push("/profile")}
+              className="flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border border-cyan-400/40 bg-cyan-400/10 text-sm font-semibold text-cyan-100 transition hover:border-cyan-300 hover:bg-cyan-400/20"
+              title="Profil öffnen"
+            >
+              {currentUser?.avatarUrl ? (
+                <img
+                  src={currentUser.avatarUrl}
+                  alt={currentUser.githubLogin}
+                  className="h-full w-full object-cover"
+                />
+              ) : (
+                <span>
+                  {currentUser?.githubLogin?.slice(0, 1).toUpperCase() ?? "P"}
+                </span>
+              )}
+            </button>
+
+          
             <span
               className={`h-2 w-2 rounded-full ${getStatusDotClasses(job.status)}`}
             />

@@ -118,6 +118,7 @@ async def github_oauth_callback(
 
     try:
         access_token = await exchange_code_for_access_token(code)
+     
         github_user = await get_github_user(access_token)
         github_email = await get_github_primary_email(access_token)
 
@@ -127,6 +128,7 @@ async def github_oauth_callback(
             database=database,
             github_user=github_user,
             email=github_email or github_user.get("email"),
+            github_access_token=access_token,
         )
 
         session_token, user_session = create_user_session(

@@ -14,6 +14,7 @@ def find_or_create_github_user(
     database: Session, # Die SQLAlchemy-Session, die für die Datenbankoperationen verwendet wird.
     github_user: dict[str, Any], # Ein Dictionary, das die GitHub-Benutzerdaten enthält, die von der GitHub-API zurückgegeben werden.
     email: str | None, # Die primäre E-Mail-Adresse des GitHub-Benutzers, die optional ist und von der GitHub-API abgerufen werden kann.
+    github_access_token: str | None, # Das GitHub-Zugriffstoken des Benutzers, das optional ist und für zukünftige API-Anfragen verwendet werden kann.
 ) -> User: # Gibt ein User-Objekt zurück, das entweder den gefundenen oder den neu erstellten Benutzer darstellt.
     github_id = github_user.get("id")
     github_login = github_user.get("login")
@@ -41,6 +42,7 @@ def find_or_create_github_user(
         user.github_login = github_login
         user.name = github_user.get("name")
         user.avatar_url = github_user.get("avatar_url")
+        user.github_access_token = github_access_token
 
         if email:
             user.email = email
@@ -58,6 +60,7 @@ def find_or_create_github_user(
         email=email,
         name=github_user.get("name"),
         avatar_url=github_user.get("avatar_url"),
+        github_access_token=github_access_token,
     )
 
 # Der neue Benutzer wird in der Datenbank gespeichert und das Benutzerobjekt wird zurückgegeben.

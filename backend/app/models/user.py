@@ -57,3 +57,10 @@ class User(Base):
         default=lambda: datetime.now(timezone.utc),
         nullable=False,
     )
+
+
+# Optionales Feld für das GitHub-Zugriffstoken des Benutzers, das bis zu 500 Zeichen lang sein kann.
+    github_access_token: Mapped[str | None] = mapped_column(
+    String(500),
+    nullable=True,
+)
