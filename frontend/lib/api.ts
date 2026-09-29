@@ -350,3 +350,10 @@ export async function prepareNextAnalysis(jobId: string) {
     }
   );
 }
+
+
+export async function deleteAnalysisJob(jobId: string) {
+  return request<void>(`/api/analysis/jobs/${encodeURIComponent(jobId)}`, {
+    method: "DELETE",
+  });
+}

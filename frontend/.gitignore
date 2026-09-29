@@ -45,3 +45,6 @@ AGENTS.md
 CLAUDE.md
 **/AGENTS.md
 **/CLAUDE.md
+
+# Semgrep community rules downloaded locally
+analyzer/semgrep-rules/community/

@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import {
+  deleteAnalysisJob,
   getCurrentUser,
   getMarkdownExportUrl,
   getMyAnalysisJobs,
@@ -64,7 +65,8 @@ export default function ProfilePage() {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [githubRepositories, setGithubRepositories] = useState<GitHubRepository[]>([]);
   const [isStartingGitHubRepo, setIsStartingGitHubRepo] = useState<string | null>(null); 
-
+  const [deletingJobId, setDeletingJobId] = useState<string | null>(null);
+ 
   useEffect(() => {
     async function loadProfileData() {
       try {
@@ -122,6 +124,55 @@ export default function ProfilePage() {
   }
 }
 
+
+
+async function handleDeleteJob(job: UserAnalysisJob) {
+  const confirmed = window.confirm(
+    `Möchtest du die Analyse für "${job.repositoryOwner}/${job.repositoryName}" wirklich löschen?`
+  );
+
+  if (!confirmed) {
+    return;
+  }
+
+  try {
+    setDeletingJobId(job.jobId);
+    setErrorMessage(null);
+
+    await deleteAnalysisJob(job.jobId);
+
+    setJobs((currentJobs) =>
+      currentJobs.filter((currentJob) => currentJob.jobId !== job.jobId)
+    );
+
+    setStats((currentStats) => {
+      if (!currentStats) {
+        return currentStats;
+      }
+
+      return {
+        ...currentStats,
+        totalJobs: Math.max(0, currentStats.totalJobs - 1),
+        completedJobs:
+          job.status === "completed"
+            ? Math.max(0, currentStats.completedJobs - 1)
+            : currentStats.completedJobs,
+        failedJobs:
+          job.status === "failed"
+            ? Math.max(0, currentStats.failedJobs - 1)
+            : currentStats.failedJobs,
+      };
+    });
+  } catch (error) {
+    setErrorMessage(
+      error instanceof Error
+        ? error.message
+        : "Analyse konnte nicht gelöscht werden."
+    );
+  } finally {
+    setDeletingJobId(null);
+  }
+}
 
 
   if (isLoading) {
@@ -327,6 +378,7 @@ export default function ProfilePage() {
                         GitHub öffnen
                       </a>
 
+
                       <button
                         type="button"
                         onClick={() => void handleAnalyzeGitHubRepository(repository)}
@@ -337,8 +389,15 @@ export default function ProfilePage() {
                           ? "Analyse startet..."
                           : "Analysieren"}
                       </button>
+
+
+                            
+
                     </div>
+                    
                   </div>
+
+        
                 </article>
               ))}
             </div>
@@ -414,6 +473,15 @@ export default function ProfilePage() {
                       >
                         Öffnen
                       </button>
+
+                       <button
+                            type="button"
+                            onClick={() => void handleDeleteJob(job)}
+                            disabled={deletingJobId === job.jobId}
+                            className="rounded-xl border border-rose-400/30 bg-rose-400/10 px-4 py-2 text-sm font-semibold text-rose-100 transition hover:bg-rose-400/20 disabled:cursor-not-allowed disabled:opacity-60"
+                            >
+                            {deletingJobId === job.jobId ? "Wird gelöscht..." : "Löschen"}
+                        </button>
 
                       <a
                         href={getMarkdownExportUrl(job.jobId)}
