@@ -1,0 +1,16 @@
+rules:
+  - id: vue-avoid-v-html
+    message: "Semgrep: v-html in Vue gefunden. Das kann zu XSS führen, wenn User-Input gerendert wird."
+    severity: WARNING
+    languages:
+      - regex
+    paths:
+      include:
+        - "*.vue"
+    pattern-regex: '<[^<>]*v-html\s*='
+    metadata:
+      category: security
+      cwe:
+        - "CWE-79"
+      technology:
+        - vue

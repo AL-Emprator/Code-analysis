@@ -1,0 +1,122 @@
+rules:
+  - id: python-hardcoded-secret
+    pattern-either:
+      - pattern: password = "..."
+      - pattern: passwd = "..."
+      - pattern: pwd = "..."
+      - pattern: api_key = "..."
+      - pattern: token = "..."
+      - pattern: secret = "..."
+      - pattern: github_token = "..."
+    message: "Semgrep: Möglicherweise hardcodiertes Secret gefunden."
+    severity: WARNING
+    languages:
+      - python
+    metadata:
+      category: security
+      cwe:
+        - "CWE-798"
+
+  - id: python-os-system
+    pattern: os.system($X)
+    message: "Semgrep: os.system() gefunden. Das kann Command Injection ermöglichen."
+    severity: ERROR
+    languages:
+      - python
+    metadata:
+      category: security
+      cwe:
+        - "CWE-78"
+
+  - id: python-subprocess-shell-true
+    pattern-either:
+      - pattern: subprocess.run($X, shell=True)
+      - pattern: subprocess.call($X, shell=True)
+      - pattern: subprocess.Popen($X, shell=True)
+    message: "Semgrep: subprocess mit shell=True gefunden. Das kann Command Injection ermöglichen."
+    severity: ERROR
+    languages:
+      - python
+    metadata:
+      category: security
+      cwe:
+        - "CWE-78"
+
+  - id: python-eval-usage
+    pattern: eval($X)
+    message: "Semgrep: eval() gefunden. Das kann Code Injection ermöglichen."
+    severity: ERROR
+    languages:
+      - python
+    metadata:
+      category: security
+      cwe:
+        - "CWE-94"
+
+  - id: python-exec-usage
+    pattern: exec($X)
+    message: "Semgrep: exec() gefunden. Das kann Code Injection ermöglichen."
+    severity: ERROR
+    languages:
+      - python
+    metadata:
+      category: security
+      cwe:
+        - "CWE-94"
+
+  - id: python-pickle-loads
+    pattern-either:
+      - pattern: pickle.loads($X)
+      - pattern: pickle.load($X)
+    message: "Semgrep: pickle.load/loads gefunden. Unsichere Deserialisierung möglich."
+    severity: WARNING
+    languages:
+      - python
+    metadata:
+      category: security
+      cwe:
+        - "CWE-502"
+
+  - id: python-requests-verify-false
+    pattern-either:
+      - pattern: requests.get($URL, verify=False)
+      - pattern: requests.post($URL, verify=False)
+      - pattern: requests.put($URL, verify=False)
+      - pattern: requests.delete($URL, verify=False)
+      - pattern: requests.request($METHOD, $URL, verify=False)
+    message: "Semgrep: requests mit verify=False gefunden. TLS-Zertifikatsprüfung ist deaktiviert."
+    severity: WARNING
+    languages:
+      - python
+    metadata:
+      category: security
+      cwe:
+        - "CWE-295"
+
+  - id: python-sql-f-string
+    pattern-either:
+      - pattern: cursor.execute(f"...")
+      - pattern: connection.execute(f"...")
+      - pattern: db.execute(f"...")
+    message: "Semgrep: SQL-Abfrage mit f-String gefunden. Mögliche SQL Injection."
+    severity: ERROR
+    languages:
+      - python
+    metadata:
+      category: security
+      cwe:
+        - "CWE-89"
+
+  - id: python-sql-string-concat
+    pattern-either:
+      - pattern: cursor.execute("..." + $X)
+      - pattern: connection.execute("..." + $X)
+      - pattern: db.execute("..." + $X)
+    message: "Semgrep: SQL-Abfrage mit String-Verkettung gefunden. Mögliche SQL Injection."
+    severity: ERROR
+    languages:
+      - python
+    metadata:
+      category: security
+      cwe:
+        - "CWE-89"

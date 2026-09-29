@@ -1,0 +1,108 @@
+rules:
+  - id: php-hardcoded-secret
+    pattern-either:
+      - pattern: $password = "...";
+      - pattern: $passwd = "...";
+      - pattern: $pwd = "...";
+      - pattern: $api_key = "...";
+      - pattern: $token = "...";
+      - pattern: $secret = "...";
+    message: "Semgrep: Möglicherweise hardcodiertes Secret gefunden."
+    severity: WARNING
+    languages:
+      - php
+    metadata:
+      category: security
+      cwe:
+        - "CWE-798"
+
+  - id: php-eval-usage
+    pattern: eval($X);
+    message: "Semgrep: eval() in PHP gefunden. Das kann Code Injection ermöglichen."
+    severity: ERROR
+    languages:
+      - php
+    metadata:
+      category: security
+      cwe:
+        - "CWE-94"
+
+  - id: php-system-user-input
+    pattern-either:
+      - pattern: system($_GET[$X]);
+      - pattern: system($_POST[$X]);
+      - pattern: shell_exec($_GET[$X]);
+      - pattern: shell_exec($_POST[$X]);
+      - pattern: exec($_GET[$X]);
+      - pattern: exec($_POST[$X]);
+      - pattern: passthru($_GET[$X]);
+      - pattern: passthru($_POST[$X]);
+    message: "Semgrep: Mögliche Command Injection durch direkte Benutzereingabe."
+    severity: ERROR
+    languages:
+      - php
+    metadata:
+      category: security
+      cwe:
+        - "CWE-78"
+
+  - id: php-echo-user-input
+    pattern-either:
+      - pattern: echo $_GET[$X];
+      - pattern: echo $_POST[$X];
+      - pattern: print $_GET[$X];
+      - pattern: print $_POST[$X];
+    message: "Semgrep: Mögliche XSS durch direkte Ausgabe von Benutzereingaben."
+    severity: WARNING
+    languages:
+      - php
+    metadata:
+      category: security
+      cwe:
+        - "CWE-79"
+
+  - id: php-include-user-input
+    pattern-either:
+      - pattern: include $_GET[$X];
+      - pattern: include $_POST[$X];
+      - pattern: require $_GET[$X];
+      - pattern: require $_POST[$X];
+      - pattern: include_once $_GET[$X];
+      - pattern: require_once $_POST[$X];
+    message: "Semgrep: Dynamisches include/require mit Benutzereingabe gefunden."
+    severity: ERROR
+    languages:
+      - php
+    metadata:
+      category: security
+      cwe:
+        - "CWE-98"
+
+  - id: php-mysql-query-concat
+    pattern-either:
+      - pattern: mysql_query("..." . $X);
+      - pattern: mysqli_query($CONN, "..." . $X);
+      - pattern: $CONN->query("..." . $X);
+    message: "Semgrep: SQL-Abfrage mit String-Verkettung gefunden. Mögliche SQL Injection."
+    severity: ERROR
+    languages:
+      - php
+    metadata:
+      category: security
+      cwe:
+        - "CWE-89"
+
+  - id: php-pdo-query-user-input
+    pattern-either:
+      - pattern: $PDO->query($_GET[$X]);
+      - pattern: $PDO->query($_POST[$X]);
+      - pattern: $PDO->exec($_GET[$X]);
+      - pattern: $PDO->exec($_POST[$X]);
+    message: "Semgrep: PDO query/exec mit direkter Benutzereingabe gefunden. Mögliche SQL Injection."
+    severity: ERROR
+    languages:
+      - php
+    metadata:
+      category: security
+      cwe:
+        - "CWE-89"
