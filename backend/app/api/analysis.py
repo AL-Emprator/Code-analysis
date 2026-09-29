@@ -6,6 +6,9 @@ from fastapi.responses import Response
 from sqlalchemy.orm import Session
 import os
 import subprocess
+from pathlib import Path
+import shutil
+
 
 from app.core.database import get_db
 from app.models.analysis_job import AnalysisJob
@@ -32,7 +35,7 @@ from app.schemas.analysis import (
 
 
 from app.services.session_service import get_user_from_session_token
-from sqlalchemy import select
+from sqlalchemy import delete, select
 
 
 
@@ -837,3 +840,76 @@ async def export_analysis_report_markdown(
             "Content-Disposition": f'attachment; filename="{filename}"'
         },
     )
+
+
+
+
+@router.delete("/jobs/{job_id}", status_code=204)
+async def delete_analysis_job(
+    job_id: str,
+    request: Request,
+    database: Session = Depends(get_db),
+):
+    session_token = request.cookies.get("session_id")
+
+    if not session_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Du musst angemeldet sein.",
+        )
+
+    current_user = get_user_from_session_token(
+        database=database,
+        raw_token=session_token,
+    )
+
+    if current_user is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Die Session ist ungültig oder abgelaufen.",
+        )
+
+    analysis_job = database.scalar(
+        select(AnalysisJob).where(
+            AnalysisJob.id == job_id,
+            AnalysisJob.user_id == current_user.id,
+        )
+    )
+
+    if analysis_job is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Analyse-Job wurde nicht gefunden.",
+        )
+
+    database.execute(
+        delete(AnalysisResult).where(
+            AnalysisResult.job_id == analysis_job.id,
+        )
+    )
+
+    database.execute(
+        delete(AnalysisFile).where(
+            AnalysisFile.job_id == analysis_job.id,
+        )
+    )
+
+    database.execute(
+        delete(AnalysisJob).where(
+            AnalysisJob.id == analysis_job.id,
+        )
+    )
+
+    repository_storage_dir = os.getenv(
+        "REPOSITORY_STORAGE_DIR",
+        "/data/repos",
+    )
+
+    repository_directory = Path(repository_storage_dir) / analysis_job.id
+
+    if repository_directory.exists() and repository_directory.is_dir():
+        shutil.rmtree(repository_directory)
+
+    database.commit()
+
+    return Response(status_code=204)

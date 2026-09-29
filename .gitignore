@@ -16,3 +16,6 @@ node_modules/
 
 backend/data/
 backend/data/repos/
+
+# Semgrep community rules downloaded locally
+analyzer/semgrep-rules/community/
