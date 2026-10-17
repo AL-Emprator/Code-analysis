@@ -60,7 +60,7 @@ def analyze_code_content(
         f"Funktionen: {function_count}\n"
         f"Klassen: {class_count}\n"
         f"TODO/FIXME-Kommentare: {todo_count}\n"
-        f"Gefundene Sicherheitsprobleme: {len(security_findings)}"
+        f"Findings (eigene Regeln): {len(security_findings)}"
     )
 
     issues = format_findings_as_text(security_findings)

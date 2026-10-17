@@ -4,6 +4,12 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import SecurityFindings from "../../../components/SecurityFindings";
 
+import SecurityOverview from "../../../components/SecurityOverview";
+import {
+  getSecurityStats,
+  getCustomFindingCount,
+} from "../../../lib/securityStats";
+
 
 import {
   getAnalysisJob,
@@ -1106,6 +1112,14 @@ export default function AnalysisDashboardPage() {
                     </section>
 
                     <section>
+
+                      <SecurityOverview
+                        stats={getSecurityStats(
+                          analysisResult.findingsJson ?? [],
+                          getCustomFindingCount(analysisResult.summary)
+                        )}
+                      />
+
                       <SecurityFindings
                         findings={analysisResult.findingsJson ?? []}
                       />
@@ -1189,6 +1203,13 @@ export default function AnalysisDashboardPage() {
                         <pre className="whitespace-pre-wrap rounded-xl border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-200">
                           {getCustomIssues(result.issues)}
                         </pre>
+
+                        <SecurityOverview
+                          stats={getSecurityStats(
+                            result.findingsJson ?? [],
+                            getCustomFindingCount(result.summary)
+                          )}
+                        />
 
                         <SecurityFindings findings={result.findingsJson ?? []} />
                       </div>

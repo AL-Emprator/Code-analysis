@@ -36,7 +36,7 @@ def create_finding(
 
 def format_findings_as_text(findings: list[Finding]) -> str:
     if not findings:
-        return "Keine Sicherheitsprobleme gefunden."
+        return "Keine Findings durch eigene Regeln erkannt."
 
     blocks: list[str] = []
 
