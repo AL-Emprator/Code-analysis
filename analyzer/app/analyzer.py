@@ -2,6 +2,7 @@ import sys
 from datetime import datetime, timezone
 from sqlalchemy import JSON
 from sqlalchemy import delete, select
+from app.semgrep_deduplicator import deduplicate_semgrep_findings
 
 from app.database import create_database_session
 from app.models import AnalysisFile, AnalysisJob, AnalysisResult
@@ -122,6 +123,19 @@ def analyze_file(job_id: str, file_id: int) -> None:
             semgrep_findings = normalize_semgrep_results(
                 semgrep_output,
                 repository_path=str(repository_path),
+            )
+
+            raw_findings_count = len(semgrep_findings)
+
+            semgrep_findings = deduplicate_semgrep_findings(
+                semgrep_findings
+            )
+
+            print(
+                f"[analyzer] Semgrep Findings: "
+                f"{raw_findings_count} original, "
+                f"{len(semgrep_findings)} unique",
+                flush=True,
             )
 
             print(
@@ -318,6 +332,20 @@ def analyze_repository(job_id: str) -> None:
         try:
             semgrep_output = run_semgrep_scan(str(repository_path))
             semgrep_findings = normalize_semgrep_results(semgrep_output, repository_path=str(repository_path),)
+
+
+            raw_findings_count = len(semgrep_findings)
+
+            semgrep_findings = deduplicate_semgrep_findings(
+                semgrep_findings
+            )
+
+            print(
+                f"[analyzer] Semgrep Findings: "
+                f"{raw_findings_count} original, "
+                f"{len(semgrep_findings)} unique",
+                flush=True,
+            )
 
             semgrep_findings_by_file = group_semgrep_findings_by_file(
                 findings=semgrep_findings,

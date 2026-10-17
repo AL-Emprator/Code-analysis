@@ -140,6 +140,9 @@ export type SecurityFinding = {
   owasp: string[];
   confidence?: string | null;
   sources?: string[];
+  duplicate_count?: number;
+  rule_ids?: string[];
+
 };
 
 export type GitHubRepositoriesResponse = {
