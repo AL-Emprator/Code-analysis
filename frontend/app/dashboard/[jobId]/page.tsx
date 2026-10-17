@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import SecurityFindings from "../../../components/SecurityFindings";
+
 
 import {
   getAnalysisJob,
@@ -312,6 +314,11 @@ function countBySeverity(findings: ParsedFinding[]) {
 
   return counts;
 }
+
+function getCustomIssues(issues: string): string {
+  return issues.split(/===\s*Semgrep Findings\s*===/)[0].trim();
+}
+
 
 // ---------------------------------------------------------------------------
 // Page
@@ -1087,9 +1094,23 @@ export default function AnalysisDashboardPage() {
                     })}
                   </div>
                 ) : (
-                  <pre className="mt-4 max-h-[32rem] overflow-y-auto whitespace-pre-wrap rounded-xl bg-black/30 p-4 text-sm leading-6 text-slate-300">
-                    {analysisResult.issues}
-                  </pre>
+                  <div className="space-y-6">
+                    <section>
+                      <h3 className="mb-3 text-sm font-semibold uppercase text-slate-400">
+                        Eigene Security-Regeln
+                      </h3>
+
+                      <pre className="whitespace-pre-wrap rounded-xl border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-200">
+                        {getCustomIssues(analysisResult.issues)}
+                      </pre>
+                    </section>
+
+                    <section>
+                      <SecurityFindings
+                        findings={analysisResult.findingsJson ?? []}
+                      />
+                    </section>
+                  </div>
                 )}
               </div>
             </div>
@@ -1164,9 +1185,14 @@ export default function AnalysisDashboardPage() {
                         Gefundene Hinweise
                       </h4>
 
-                      <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap text-sm leading-6 text-slate-300">
-                        {result.issues}
-                      </pre>
+                      <div className="space-y-5">
+                        <pre className="whitespace-pre-wrap rounded-xl border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-200">
+                          {getCustomIssues(result.issues)}
+                        </pre>
+
+                        <SecurityFindings findings={result.findingsJson ?? []} />
+                      </div>
+
                     </div>
                   </div>
                 </article>

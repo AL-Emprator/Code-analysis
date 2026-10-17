@@ -68,6 +68,10 @@ class AnalysisResultResponse(BaseModel):
     file_path: str = Field(alias="filePath")
     summary: str
     issues: str
+    findings_json: list[dict] = Field(
+        default_factory=list,
+        alias="findingsJson",
+    )
     created_at: datetime = Field(alias="createdAt")
 
 class AnalysisFileResponse(BaseModel):

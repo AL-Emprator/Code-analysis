@@ -74,6 +74,7 @@ export type AnalysisResultResponse = {
   filePath: string;
   summary: string;
   issues: string;
+  findingsJson: SecurityFinding[];
   createdAt: string;
 };
 
@@ -119,6 +120,26 @@ export type GitHubRepository = {
   fork: boolean;
   language: string | null;
   updatedAt: string | null;
+};
+
+export type SecurityFinding = {
+  id: string;
+  tool: string;
+  rule_id: string;
+  title: string;
+  severity: string;
+  original_severity?: string;
+  message: string;
+  file_path: string | null;
+  start_line: number | null;
+  end_line: number | null;
+  code: string;
+  recommendation: string;
+  category?: string | null;
+  cwe: string[];
+  owasp: string[];
+  confidence?: string | null;
+  sources?: string[];
 };
 
 export type GitHubRepositoriesResponse = {

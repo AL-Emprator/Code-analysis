@@ -524,6 +524,7 @@ async def get_analysis_result(
         filePath=result.file_path,
         summary=result.summary,
         issues=result.issues,
+        findingsJson=result.findings_json or [],
         createdAt=result.created_at,
     )
 
@@ -647,6 +648,7 @@ async def get_analysis_results(
                 filePath=result.file_path,
                 summary=result.summary,
                 issues=result.issues,
+                findingsJson=result.findings_json or [],
                 createdAt=result.created_at,
             )
             for result in results

@@ -1,5 +1,5 @@
 from datetime import datetime
-
+from sqlalchemy import JSON
 from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -61,4 +61,9 @@ class AnalysisResult(Base):
     file_path: Mapped[str] = mapped_column(String(1000), nullable=False)
     summary: Mapped[str] = mapped_column(Text, nullable=False)
     issues: Mapped[str] = mapped_column(Text, nullable=False)
+    findings_json: Mapped[list | None] = mapped_column(
+    JSON,
+    nullable=True,
+)
+    
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

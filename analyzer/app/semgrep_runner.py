@@ -19,6 +19,8 @@ def run_semgrep_scan(repository_path: str) -> dict[str, Any]:
         "/analyzer/semgrep-rules/community/c/lang/security",
         "--config",
         "/analyzer/semgrep-rules/community/python/lang/security",
+        "--config",
+        "/analyzer/semgrep-rules/custom/vue-security.yml",
         "--json",
         "--metrics=off",
         str(repo_path),

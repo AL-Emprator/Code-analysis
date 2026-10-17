@@ -1,6 +1,6 @@
 import sys
 from datetime import datetime, timezone
-
+from sqlalchemy import JSON
 from sqlalchemy import delete, select
 
 from app.database import create_database_session
@@ -8,7 +8,7 @@ from app.models import AnalysisFile, AnalysisJob, AnalysisResult
 from app.storage import read_repository_file
 from app.storage import get_repository_directory
 
-
+from pathlib import Path
 
 #rules bughunting
 from app.findings import Finding, format_findings_as_text
@@ -69,6 +69,7 @@ def analyze_code_content(
 
 
 # Analyze a single file for a given job
+
 def analyze_file(job_id: str, file_id: int) -> None:
     database = create_database_session()
 
@@ -94,6 +95,7 @@ def analyze_file(job_id: str, file_id: int) -> None:
 
         job.status = "analyzing"
         job.error_message = None
+        job.completed_at = None
         database.commit()
 
         content = read_repository_file(
@@ -107,43 +109,73 @@ def analyze_file(job_id: str, file_id: int) -> None:
             language=analysis_file.language,
         )
 
-        repository_path = get_repository_directory(job.id)
+        repository_path = get_repository_directory(job.id).resolve()
 
+        # Always initialize, even if Semgrep fails.
+        file_semgrep_findings: list[dict] = []
         semgrep_issues = "Keine Semgrep Findings gefunden."
+        semgrep_error_message: str | None = None
 
         try:
             semgrep_output = run_semgrep_scan(str(repository_path))
-            semgrep_findings = normalize_semgrep_results(semgrep_output)
+
+            semgrep_findings = normalize_semgrep_results(
+                semgrep_output,
+                repository_path=str(repository_path),
+            )
+
+            print(
+                f"[DEBUG] Total Semgrep Findings: "
+                f"{len(semgrep_findings)}",
+                flush=True,
+            )
 
             semgrep_findings_by_file = group_semgrep_findings_by_file(
                 findings=semgrep_findings,
                 repository_path=str(repository_path),
             )
 
+            print(
+                "[DEBUG] Semgrep paths:",
+                list(semgrep_findings_by_file.keys()),
+                flush=True,
+            )
+
+            selected_file = analysis_file.path.replace("\\", "/").removeprefix("./")
+
+            print(
+                f"[DEBUG] Selected file: {repr(selected_file)}",
+                flush=True,
+            )
+
             file_semgrep_findings = semgrep_findings_by_file.get(
-                analysis_file.path,
+                selected_file,
                 [],
+            )
+
+            print(
+                f"[DEBUG] Matched Findings: "
+                f"{len(file_semgrep_findings)}",
+                flush=True,
             )
 
             semgrep_issues = format_semgrep_findings_as_text(
                 file_semgrep_findings
             )
 
-            print(
-                f"[analyzer] Semgrep file scan completed for job={job.id}, "
-                f"file={analysis_file.path}, "
-                f"findings={len(file_semgrep_findings)}"
-            )
-
         except Exception as semgrep_error:
+            semgrep_error_message = str(semgrep_error)
+
             print(
-                f"[analyzer] Semgrep file scan failed for job={job.id}, "
-                f"file={analysis_file.path}: {semgrep_error}"
+                f"[analyzer] Semgrep failed for "
+                f"job={job.id}, file={analysis_file.path}: "
+                f"{semgrep_error_message}",
+                flush=True,
             )
 
             semgrep_issues = (
-                "Semgrep konnte für diese Datei nicht ausgeführt werden. "
-                f"Fehler: {semgrep_error}"
+                "Semgrep-Scan fehlgeschlagen: "
+                + semgrep_error_message
             )
 
         combined_issues = (
@@ -167,19 +199,27 @@ def analyze_file(job_id: str, file_id: int) -> None:
                 file_path=analysis_file.path,
                 summary=summary,
                 issues=combined_issues,
+                findings_json=file_semgrep_findings,
                 created_at=datetime.now(timezone.utc),
             )
         )
 
         job.status = "completed"
         job.completed_at = datetime.now(timezone.utc)
-        job.error_message = None
+        job.error_message = (
+            f"Semgrep-Scan fehlgeschlagen: {semgrep_error_message}"
+            if semgrep_error_message
+            else None
+        )
 
         database.commit()
 
         print(
-            f"[analyzer] File analysis completed for job={job.id}, "
-            f"file={analysis_file.path}"
+            f"[analyzer] File analysis completed: "
+            f"job={job.id}, "
+            f"file={analysis_file.path}, "
+            f"semgrep_findings={len(file_semgrep_findings)}",
+            flush=True,
         )
 
     except Exception as error:
@@ -210,22 +250,33 @@ def group_semgrep_findings_by_file(
 ) -> dict[str, list[dict]]:
     grouped: dict[str, list[dict]] = {}
 
-    normalized_repository_path = repository_path.replace("\\", "/").rstrip("/")
+    repo_root = Path(repository_path).resolve()
 
     for finding in findings:
-        file_path = finding.get("file_path")
+        raw_path = finding.get("file_path")
 
-        if not file_path:
+        if not raw_path:
             continue
 
-        normalized_file_path = str(file_path).replace("\\", "/")
+        file_path = Path(str(raw_path))
 
-        if normalized_file_path.startswith(normalized_repository_path + "/"):
-            normalized_file_path = normalized_file_path[
-                len(normalized_repository_path) + 1:
-            ]
+        if file_path.is_absolute():
+            try:
+                relative_path = file_path.resolve().relative_to(repo_root)
+            except ValueError:
+                print(
+                    f"[WARNING] Semgrep finding outside repository: {raw_path}",
+                    flush=True,
+                )
+                continue
+        else:
+            relative_path = file_path
 
-        grouped.setdefault(normalized_file_path, []).append(finding)
+        normalized_path = (
+            relative_path.as_posix().removeprefix("./")
+        )
+
+        grouped.setdefault(normalized_path, []).append(finding)
 
     return grouped
 
@@ -266,7 +317,7 @@ def analyze_repository(job_id: str) -> None:
 
         try:
             semgrep_output = run_semgrep_scan(str(repository_path))
-            semgrep_findings = normalize_semgrep_results(semgrep_output)
+            semgrep_findings = normalize_semgrep_results(semgrep_output, repository_path=str(repository_path),)
 
             semgrep_findings_by_file = group_semgrep_findings_by_file(
                 findings=semgrep_findings,
@@ -333,6 +384,7 @@ def analyze_repository(job_id: str) -> None:
                         file_path=analysis_file.path,
                         summary=summary,
                         issues=combined_issues,
+                        findings_json=file_semgrep_findings,
                         created_at=datetime.now(timezone.utc),
                     )
                 )
