@@ -1101,15 +1101,18 @@ export default function AnalysisDashboardPage() {
                   </div>
                 ) : (
                   <div className="space-y-6">
-                    <section>
-                      <h3 className="mb-3 text-sm font-semibold uppercase text-slate-400">
-                        Eigene Security-Regeln
-                      </h3>
+                    {/* Nur anzeigen, wenn die eigenen Regeln tatsächlich etwas gefunden haben. */}
+                    {getCustomFindingCount(analysisResult.summary) > 0 && (
+                      <section>
+                        <h3 className="mb-3 text-sm font-semibold uppercase text-slate-400">
+                          Eigene Security-Regeln
+                        </h3>
 
-                      <pre className="whitespace-pre-wrap rounded-xl border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-200">
-                        {getCustomIssues(analysisResult.issues)}
-                      </pre>
-                    </section>
+                        <pre className="whitespace-pre-wrap rounded-xl border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-200">
+                          {getCustomIssues(analysisResult.issues)}
+                        </pre>
+                      </section>
+                    )}
 
                     <section>
 
@@ -1200,9 +1203,11 @@ export default function AnalysisDashboardPage() {
                       </h4>
 
                       <div className="space-y-5">
-                        <pre className="whitespace-pre-wrap rounded-xl border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-200">
-                          {getCustomIssues(result.issues)}
-                        </pre>
+                        {getCustomFindingCount(result.summary) > 0 && (
+                          <pre className="whitespace-pre-wrap rounded-xl border border-white/10 bg-slate-950/60 p-4 text-sm text-slate-200">
+                            {getCustomIssues(result.issues)}
+                          </pre>
+                        )}
 
                         <SecurityOverview
                           stats={getSecurityStats(
