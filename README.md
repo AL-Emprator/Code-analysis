@@ -1,194 +1,225 @@
 # Code Analysis Platform
 
-A small web platform for analyzing GitHub repositories with a clean onboarding flow.
+Web application for analyzing GitHub repositories for potential security issues. The project combines custom static-analysis rules with Semgrep, presents findings in a dashboard, and supports file-level and repository-wide scans.
 
----
+> **Project status:** Active development / prototype. Results are advisory and do not guarantee that a repository is secure. Do not deploy publicly without reviewing authentication, permissions, data handling and the privacy documentation.
 
-## Project structure
+## Features
 
-Top-level tree:
+- Login/registration and GitHub OAuth integration.
+- Submit a GitHub repository URL or select a repository from the GitHub profile view.
+- Background repository cloning and source-file indexing via a worker.
+- Select an individual file for analysis or analyze the complete repository.
+- Custom static checks for security patterns such as secrets, insecure communication, injection and XSS, depending on language/rule coverage.
+- Semgrep scanning with local custom and community rules.
+- Normalized findings with severity, source location, rule identifiers, code context and recommendations when available.
+- Deduplication of overlapping Semgrep findings, preserving originating rule IDs.
+- Security summary/statistics and detailed finding cards in the dashboard.
+- Profile with analysis history, job deletion and Markdown export.
+- Repository privacy notice, a first-analysis acknowledgement dialog on the home page, and a privacy information page at `/datenschutz`.
 
+**Limitations:** Rule coverage varies by language. The privacy acknowledgement currently uses browser `sessionStorage` on the home page; it is not a backend-enforced authorization or legal consent record. The profile's direct repository submission path must be reviewed separately before claiming the same dialog is enforced there. The privacy page contains unfinished legal/operational details.
+
+## Architecture
+
+```text
+Next.js frontend (port 3000)
+        |
+        v
+FastAPI backend (port 8000) ---- SQLite (/data/code_platform.db)
+        |                               |
+        +--> Background worker --------+--> /data/repos/<job_id>
+        |
+        +--> Python analyzer
+                 |-- Custom security rules
+                 |-- Semgrep (local YAML rules)
+                 +-- Normalization / deduplication
 ```
+
+Typical workflow:
+
+1. The user authenticates and submits a GitHub repository.
+2. The backend creates a job; the worker clones the repository and indexes its files.
+3. The dashboard displays indexed files and supports a file-level or full-repository scan.
+4. The analyzer runs custom checks and Semgrep; the backend stores findings and job status.
+5. The frontend displays security statistics, findings and available reports.
+
+## Repository layout
+
+```text
 code-platform/
-├─ docker-compose.yml
-├─ analyzer/            # (empty) analysis worker / engine (to be implemented)
-├─ backend/             # minimal FastAPI backend (see backend/app/main.py)
-├─ docs/                # documentation
-├─ frontend/            # Next.js frontend app
-│  ├─ app/
-│  │  ├─ globals.css
-│  │  ├─ layout.tsx
-│  │  └─ page.tsx       # onboarding / auth UI (client-side)
-│  ├─ public/
-│  ├─ Dockerfile
-│  ├─ package.json
-│  ├─ next.config.ts
-│  └─ tsconfig.json
-├─ worker/              # (empty) background worker (to be implemented)
-└─ README.md            # this file
-
+├── docker-compose.yml
+├── frontend/
+│   ├── app/
+│   │   ├── page.tsx                    # Login / repository submission
+│   │   ├── profile/page.tsx           # GitHub repositories and history
+│   │   ├── dashboard/[jobId]/page.tsx # Job status and findings
+│   │   └── datenschutz/page.tsx       # Privacy information
+│   ├── components/
+│   │   ├── SecurityFindings.tsx
+│   │   ├── SecurityOverview.tsx
+│   │   ├── RepositoryPrivacyNotice.tsx
+│   │   └── RepositoryPrivacyDialog.tsx
+│   └── lib/
+│       ├── api.ts
+│       └── privacyAcknowledgement.ts
+├── backend/
+│   ├── app/                           # FastAPI routes/models/schemas
+│   ├── data/                          # Local SQLite DB and cloned repos
+│   └── .env                           # Local secrets (do not commit)
+├── worker/app/                        # Repository cloning / indexing
+├── analyzer/
+│   ├── app/                           # Scanning and result storage
+│   └── semgrep-rules/
+│       ├── custom/                    # Project-owned YAML rules
+│       └── community/                 # Local external rules checkout
+└── docs/
 ```
 
-Notes:
-- The frontend is implemented in Next.js and provides the onboarding UI.
-- A minimal backend API server has been added using FastAPI at `backend/app/main.py` with a simple HTML root and OpenAPI docs available at `/docs`.
+## Requirements
 
----
+- Docker Desktop with Docker Compose
+- Git
+- Optional for running parts outside Docker: Node.js/npm, Python 3.12 and `uv`
 
-## How the project works (overview)
+The backend project currently targets **Python 3.12**. Keep local Python versions, Docker images and `uv.lock` consistent across team members.
 
-- The frontend is a Next.js app that provides an onboarding page where users can login, register, or submit a GitHub repository URL for analysis. The UI contains placeholders for authentication and repository submission flows.
-- The backend, analysis engine, and worker processes are not implemented yet; the frontend currently assumes endpoints will exist for auth (login/register/OAuth) and repo submission.
-- Typical flow (to implement):
-  1. User signs up or logs in (POST /api/auth/register or /api/auth/login).
-  2. User can optionally start GitHub OAuth (GET /api/auth/oauth/github/start) to grant access to private repos.
- 3. User pastes a repo URL and submits it to the backend (POST /api/analysis/submit).
-  4. Backend enqueues analysis work (analyzer/worker) and returns a job id or status.
+## Quick start (Docker Compose)
 
----
+Run from the project root in PowerShell:
 
-## Technologies, frameworks, libraries, and tools used
+```powershell
+git clone https://github.com/AL-Emprator/Code-analysis.git
+cd Code-analysis
 
-- Frontend: Next.js (app router), React
-- Styling: Tailwind CSS (configured in frontend)
-- Tooling: ESLint, TypeScript (types present), PostCSS
-- Container: Docker / docker-compose (project includes docker-compose.yml and frontend Dockerfile)
-
----
-
-## Frontend setup instructions
-
-1. Navigate to the frontend folder:
-
-```bash
-cd frontend
+# Set up backend/.env first (see below)
+docker compose up -d --build
+docker compose ps
+docker compose logs -f backend worker
 ```
 
-2. Install dependencies:
+Open:
 
-```bash
-npm install
+- Frontend: http://localhost:3000
+- FastAPI documentation: http://localhost:8000/docs
+- Privacy page: http://localhost:3000/datenschutz
+
+Stop services without deleting volumes:
+
+```powershell
+docker compose down
 ```
 
-3. Run the dev server:
+**Do not use `docker compose down -v` unless you intentionally want to remove the Compose-managed volumes. Back up your local database and repository copies before changing volume mounts.**
 
-```bash
-npm run dev
+## Environment configuration
+
+Create `backend/.env` locally. Configure the exact credentials and keys required by `backend/app/api/auth.py` and the project's environment settings, including GitHub OAuth credentials for GitHub sign-in. Do **not** commit real credentials or tokens.
+
+The Compose file sets these backend/worker values:
+
+```dotenv
+DATABASE_URL=sqlite:////data/code_platform.db
+REPOSITORY_STORAGE_DIR=/data/repos
+ANALYZER_COMMAND=uv run python -m app.analyzer
+ANALYZER_WORKDIR=/analyzer
 ```
 
-The frontend uses Next.js; open http://localhost:3000 by default.
+These paths refer to the **container**, not the Windows host. The Compose file bind-mounts `./backend/data` to `/data` for backend and worker. Check the actual mount before removing any old named volumes:
 
----
-
-## Backend setup instructions
-
-A minimal backend API server has been added using FastAPI. The entrypoint for the sample app is `backend/app/main.py` and exposes a simple HTML root at `/` and interactive API docs at `/docs`.
-
-Recommended Python quick start (from project root):
-
-1. Create or activate a virtual environment (optional but recommended):
-
-```bash
-cd backend
-python -m venv .venv
-.\.venv\Scripts\activate    # Windows
-source .venv/bin/activate    # macOS / Linux
+```powershell
+docker inspect code-platform-backend-1 --format '{{json .Mounts}}'
+docker compose exec backend ls -lah /data
 ```
 
-2. Install runtime dependencies:
+The container name may differ depending on the cloned directory name.
 
-```bash
-python -m pip install --upgrade pip
-python -m pip install fastapi uvicorn[standard]
+## Semgrep rules — important for teammates
+
+The Python runner currently references these local configurations:
+
+```text
+/analyzer/semgrep-rules/community/c/lang/security
+/analyzer/semgrep-rules/community/python/lang/security
+/analyzer/semgrep-rules/custom/vue-security.yml
 ```
 
-3. Run the dev server:
+The `community/` checkout is **not included by Git** in this project. Every developer who needs these scans must provision it locally:
 
-```bash
-# from the `backend` folder
-python -m uvicorn app.main:app --reload --host 127.0.0.1 --port 8000
+```powershell
+git clone https://github.com/semgrep/semgrep-rules.git analyzer/semgrep-rules/community
 ```
 
-4. Open the app:
+If the directory already exists, inspect or update that checkout instead of cloning over it. For reproducibility, the team should agree on and pin a specific community-rules commit.
 
-- HTML root: http://127.0.0.1:8000/
-- OpenAPI / docs: http://127.0.0.1:8000/docs
+Verify inside the backend container (it mounts `./analyzer` at `/analyzer`):
 
-Planned backend responsibilities (to implement beyond the minimal stub):
-
-- Authentication endpoints: `POST /api/auth/login`, `POST /api/auth/register`.
-- GitHub OAuth starter and callback: `GET /api/auth/oauth/github/start`, `GET /api/auth/oauth/github/callback`.
-- Analysis submission: `POST /api/analysis/submit` accepting `{ repoUrl }` and returning `{ jobId }` or status.
-
-Environment variables recommended for future backend work remain the same (OAuth client id/secret, DB connection, JWT secret, etc.).
-
----
-
-## Environment variables (recommended)
-
-The repository does not currently use environment variables in the frontend. The backend (when added) will likely need the following environment variables:
-
-- `GITHUB_CLIENT_ID` — GitHub OAuth app client ID
-- `GITHUB_CLIENT_SECRET` — GitHub OAuth app client secret (server-only)
-- `DATABASE_URL` — database connection string (if persisting users/jobs)
-- `JWT_SECRET` — secret used to sign JWTs (if using JWTs)
-- `PORT` — backend server port (default: 3001)
-- `NEXT_PUBLIC_API_URL` — frontend may use this to target backend API in development
-
-Include a `.env` file in the `backend/` directory for these values. Keep secrets out of version control.
-
----
-
-## How to install dependencies (summary)
-
-- Frontend: `cd frontend && npm install`
-- Backend (Python FastAPI example): `cd backend && python -m pip install -r requirements.txt` or `python -m pip install fastapi uvicorn[standard]`
-
----
-
-## How to start the frontend and backend (summary)
-
-- Frontend (development):
-
-```bash
-cd frontend
-npm run dev
+```powershell
+docker compose exec backend sh -c "cd /analyzer && uv run semgrep --version"
+docker compose exec backend ls /analyzer/semgrep-rules/community/python/lang/security
+docker compose exec backend sh -c "cd /analyzer && uv run semgrep scan --config /analyzer/semgrep-rules/custom/vue-security.yml --json --metrics=off /data/repos/JOB_ID"
 ```
 
-- Backend (development — FastAPI example):
+Replace `JOB_ID` with an existing job directory. A scan returning zero findings does not by itself demonstrate that the correct rules ran successfully: inspect errors, logs, and the configured paths. Repositories at different commits may also give different results.
 
-```bash
-cd backend
-uv run uvicorn app.main:app --reload
+## Development and diagnostics
+
+```powershell
+# Services
+docker compose up -d --build
+docker compose ps
+docker compose restart backend
+docker compose logs -f backend
+docker compose logs -f worker
+
+# Container shell and runtime checks
+docker compose exec backend sh
+docker compose exec backend uv run python --version
+
+# Analyzer: scan a repository or one indexed file
+docker compose exec backend sh -c "cd /analyzer && uv run python -m app.analyzer repo JOB_ID"
+docker compose exec backend sh -c "cd /analyzer && uv run python -m app.analyzer file JOB_ID FILE_ID"
+
+# Frontend type-check
+docker compose exec frontend npx tsc --noEmit
+
+# List cloned repositories
+docker compose exec backend ls -lah /data/repos
 ```
 
-- Docker (if you add services to docker-compose.yml):
+### SQLite database
 
-```bash
-docker-compose up --build
+Local bind-mounted database: `backend/data/code_platform.db` (container: `/data/code_platform.db`).
+
+```powershell
+# List analysis jobs
+docker compose exec backend python -c "import sqlite3; db=sqlite3.connect('/data/code_platform.db'); print(db.execute('SELECT id, status, repo_url FROM analysis_jobs ORDER BY created_at DESC LIMIT 10').fetchall()); db.close()"
+
+# Inspect stored result summaries
+docker compose exec backend python -c "import sqlite3; db=sqlite3.connect('/data/code_platform.db'); print(db.execute('SELECT job_id, file_path, summary FROM analysis_results ORDER BY created_at DESC LIMIT 10').fetchall()); db.close()"
+
+# Consistent SQLite backup (saved in /data)
+docker compose exec backend python -c "import sqlite3; src=sqlite3.connect('/data/code_platform.db'); dst=sqlite3.connect('/data/code_platform_backup.db'); src.backup(dst); dst.close(); src.close()"
 ```
 
----
+The results table stores summaries, issue text and structured JSON findings. Do not commit database files, cloned repositories or secrets.
 
-## Useful commands
+## Privacy and security notes
 
-- `cd frontend && npm run dev` — start frontend dev server
-- `cd frontend && npm run build` — build frontend for production
-- `cd frontend && npm run start` — start production frontend server
-- `npm install` — install packages in the current folder
-- `docker-compose up` — run services if docker-compose is configured
+Starting an analysis causes the selected repository to be cloned into local storage and scanned. Analysis metadata and results are stored in SQLite; findings may contain code excerpts. Only submit repositories that you are authorized to process.
 
----
+- `RepositoryPrivacyNotice` explains repository access near the submission UI.
+- `RepositoryPrivacyDialog` is used on the home page before first submission in a browser-tab session.
+- `frontend/lib/privacyAcknowledgement.ts` records acknowledgement in `sessionStorage`. This is **not** server-enforced and is **not** proof of GDPR consent.
+- The privacy information page is available at `/datenschutz`, but still contains placeholders requiring verification before production use.
+- Review GitHub OAuth scopes, token protection, access controls, deletion behavior, retention, backups and external service contacts before deployment.
+- Do not assume deleting a job automatically removes every copy or backup without verifying implementation.
 
-## Notes about current unfinished parts
+## Current development considerations
 
-- The `analyzer/` and `worker/` folders are still empty — server-side analysis engine and background worker are unimplemented.
-- The `backend/` folder contains a minimal FastAPI app at `backend/app/main.py` as a starting point for API implementation.
-- Frontend `page.tsx` contains UI placeholders for authentication, GitHub OAuth, and repository submission. The UI does not yet call real backend endpoints.
-- There are no environment variable files or secrets configured; OAuth and token exchanges must be implemented server-side before enabling OAuth flows.
-- Token handling strategy: frontend currently does not store JWTs; when implemented, prefer HttpOnly secure cookies for production.
+- Static analysis can produce false positives and false negatives; confirm reported vulnerabilities before acting on them.
+- Semgrep deduplication groups potentially overlapping rule matches and retains their rule identifiers; it is heuristic, not proof that two alerts are semantically identical.
+- Team environments need consistent Python versions, lockfiles and locally provisioned community rules.
+- Production readiness still requires hardening, privacy/legal review and end-to-end testing.
 
----
-
-If you want, I can now scaffold the frontend API client and auth hook, or create backend route stubs in `backend/` and document the API contract. Tell me which you prefer.
-
+For API routes and request schemas, use the live OpenAPI documentation at **http://localhost:8000/docs**.
