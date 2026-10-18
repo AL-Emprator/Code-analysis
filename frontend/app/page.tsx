@@ -31,6 +31,14 @@ import {
 } from "../lib/api";
 
 import { useRouter } from "next/navigation";// useRouter ist ein Hook von Next.js, der uns erlaubt, den Benutzer zu einer anderen Seite weiterzuleiten.
+import RepositoryPrivacyNotice from "../components/RepositoryPrivacyNotice";
+import RepositoryPrivacyDialog from "../components/RepositoryPrivacyDialog";
+
+import {
+  hasPrivacyAcknowledgement,
+  savePrivacyAcknowledgement,
+} from "../lib/privacyAcknowledgement";
+
 
 type AuthMode = "login" | "signup"; 
 
@@ -248,6 +256,9 @@ export default function Home() {
   const [authStatus, setAuthStatus] = useState<AuthStatus>("loading");
   const [currentUser, setCurrentUser] = useState<CurrentUser | null>(null);
 
+  const [privacyDialogOpen, setPrivacyDialogOpen] = useState(false);
+  const [privacyLoading, setPrivacyLoading] = useState(false);
+
   const router = useRouter();
 
 
@@ -371,34 +382,46 @@ export default function Home() {
   }
 
 
-  async function handleRepoSubmit(event: FormEvent<HTMLFormElement>){
+  function handleRepoSubmit(event: FormEvent<HTMLFormElement>) {
 
-    event.preventDefault();
+      event.preventDefault();
 
       if (authStatus !== "authenticated") {
-      setErrorMessage(
-        "Du musst zuerst angemeldet sein."
-      );
-      return;
-    }
+        setErrorMessage("Du musst zuerst angemeldet sein.");
+        return;
+      }
 
-    const normalizedRepoUrl = repoUrl.trim();
+      const normalizedRepoUrl = repoUrl.trim();
 
-    if (!normalizedRepoUrl) {
-      setErrorMessage(
-        "Bitte gib eine GitHub-Repository-URL ein."
-      );
-      return;
-    }
+      if (!normalizedRepoUrl) {
+        setErrorMessage(
+          "Bitte gib eine GitHub-Repository-URL ein."
+        );
+        return;
+      }
+
+      setErrorMessage(null);
+
+      // Datenschutzhinweis bereits bestätigt?
+      if (hasPrivacyAcknowledgement()) {
+        void startRepositoryAnalysis(normalizedRepoUrl);
+        return;
+      }
+
+      // Beim ersten Mal zuerst den Dialog öffnen.
+      setPrivacyDialogOpen(true);
+}
 
 
-    setIsSubmitting(true);
-    setErrorMessage(null);
-    setStatusMessage(null);
+async function startRepositoryAnalysis(repositoryUrl: string) {
 
-    try {
+  setIsSubmitting(true);
+  setErrorMessage(null);
+  setStatusMessage(null);
+
+  try {
     const response = await submitRepo({
-      repoUrl: normalizedRepoUrl,
+      repoUrl: repositoryUrl,
     });
 
     if (!response.jobId) {
@@ -408,20 +431,42 @@ export default function Home() {
     }
 
     router.push(`/dashboard/${response.jobId}`);
-
-   } catch (error) {
-    
-      setErrorMessage(
-          error instanceof Error
-            ? error.message
-            : "Repository konnte nicht geladen werden. Bitte überprüfe die URL und versuche es erneut."
-        );
+  } catch (error) {
+    setErrorMessage(
+      error instanceof Error
+        ? error.message
+        : "Repository konnte nicht geladen werden. Bitte überprüfe die URL und versuche es erneut."
+    );
   } finally {
     setIsSubmitting(false);
   }
- }
+}
 
- 
+
+ function confirmRepositoryAnalysis() {
+  // Nach der Bestätigung die URL erneut prüfen.
+  if (authStatus !== "authenticated") {
+    setPrivacyDialogOpen(false);
+    setErrorMessage("Du musst zuerst angemeldet sein.");
+    return;
+  }
+
+  const normalizedRepoUrl = repoUrl.trim();
+
+  if (!normalizedRepoUrl) {
+    setPrivacyDialogOpen(false);
+    setErrorMessage(
+      "Bitte gib eine GitHub-Repository-URL ein."
+    );
+    return;
+  }
+
+  savePrivacyAcknowledgement();
+  setPrivacyDialogOpen(false);
+
+  void startRepositoryAnalysis(normalizedRepoUrl);
+}
+
 
   // Wenn der Authentifizierungsstatus noch geladen wird, zeigen wir eine Ladeanzeige an.
   if (authStatus === "loading") {
@@ -430,6 +475,7 @@ export default function Home() {
       <p className="text-sm text-slate-300">
         Anmeldung wird geprüft...
       </p>
+
     </main>
   );
 }
@@ -653,6 +699,15 @@ export default function Home() {
                       </div>
                     </label>
 
+
+                    
+                      <div className="mt-5 space-y-4">
+                        <RepositoryPrivacyNotice />
+
+                      {/* Dein vorhandener Repository-Analyse-Button bleibt hier */}
+                    </div>
+
+
                     <AuthButton
                       type="submit"
                       disabled={isSubmitting}
@@ -682,6 +737,15 @@ export default function Home() {
             </section>
           </div>
         </div>
+      
+      
+            <RepositoryPrivacyDialog
+                open={privacyDialogOpen}
+                onCancel={() => setPrivacyDialogOpen(false)}
+                onConfirm={confirmRepositoryAnalysis}
+                loading={isSubmitting}
+            />
+      
       </main>
     </>
   );

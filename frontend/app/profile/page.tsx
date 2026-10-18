@@ -2,6 +2,8 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import RepositoryPrivacyNotice from "../../components/RepositoryPrivacyNotice";
+
 
 import {
   deleteAnalysisJob,
@@ -308,6 +310,11 @@ async function handleDeleteJob(job: UserAnalysisJob) {
           </div>
         </section>
 
+        <section className="mt-8">
+           <RepositoryPrivacyNotice compact />
+        </section>
+
+        
         <section className="mt-8 rounded-3xl border border-white/10 bg-slate-950/80 p-6 backdrop-blur-xl sm:p-8">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
             <div>
