@@ -10,6 +10,9 @@ def run_semgrep_scan(repository_path: str) -> dict[str, Any]:
     if not repo_path.exists() or not repo_path.is_dir():
         raise RuntimeError(f"Repository path does not exist: {repository_path}")
 
+
+   # Semgrep-Scan mit den angegebenen Regeln ausführen
+   # --config-Optionen können angepasst werden, um weitere Regelsets hinzuzufügen oder zu entfernen. 
     command = [
         "uv",
         "run",
