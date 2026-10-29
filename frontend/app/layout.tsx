@@ -38,6 +38,13 @@ export default function RootLayout({
                 © {new Date().getFullYear()} Code Analysis Platform
               </p>
 
+                <Link
+                    href="/owasp-top-10"
+                    className="text-xs text-slate-400 transition hover:text-cyan-300"
+                  >
+                    OWASP Top 10
+                  </Link>
+
               <Link
                 href="/datenschutz"
                 className="text-xs text-slate-400 transition hover:text-cyan-300"
