@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import RepositoryPrivacyNotice from "../../components/RepositoryPrivacyNotice";
-
+import ArchitectureDiagramButton from "../../components/ArchitectureDiagramButton";
 
 import {
   deleteAnalysisJob,
@@ -397,7 +397,7 @@ async function handleDeleteJob(job: UserAnalysisJob) {
                           : "Analysieren"}
                       </button>
 
-
+                          <ArchitectureDiagramButton repoUrl={repository.htmlUrl} />
                             
 
                     </div>
